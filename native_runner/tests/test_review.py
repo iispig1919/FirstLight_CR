@@ -633,3 +633,27 @@ def test_review_document_and_summary_cover_both_players() -> None:
     assert "已偏离" in text and "terminal fidelity mismatch: winner" in text
     assert "模型最不认同的选牌" in text and "弓箭手" in text and "骑士" in text
     assert "落点分歧最大的出牌" in text and "局势转折" in text
+
+
+def test_summary_tabulates_reviews_and_checks_them_across_matches(tmp_path: Path, capsys) -> None:
+    for name, options in (("a", {}), ("c", {"partial": True})):
+        review = scripted_review(**options)
+        review["replay_tag"] = name
+        (tmp_path / f"{name}.review.json").write_text(json.dumps(review, ensure_ascii=False), encoding="utf-8")
+
+    assert review_cli.main(["summary", str(tmp_path)]) == 0
+
+    output = capsys.readouterr().out
+    lines = output.splitlines()
+    assert lines[0].startswith("| 回放 | 判定 | 玩家 | 结果 |") and lines[1].count("---") == lines[0].count("|") - 1
+    assert sum(line.startswith("| a | faithful |") for line in lines) == 2
+    assert "| a | faithful | 0 | 胜 | 702/702 | 22 | 2 |" in output
+    assert "| c | partial | 0 | — | 526/702 |" in output
+    assert "对局数：2（faithful 1，partial 1）" in output
+    # Only the faithful match counts towards the cross-match checks.
+    assert "胜方终局局势值高于负方：1/1" in output
+    assert "（2 名玩家）" in output
+    assert "未能评分的出牌：2/45（4.4%）" in output
+
+    assert review_cli.main(["summary", str(tmp_path / "missing")]) == 1
+    assert "没有 *.review.json" in capsys.readouterr().err

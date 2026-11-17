@@ -5,12 +5,13 @@
     python -m native_runner.review analyze CACHE_INDEX --output DIR [--tag TAG] [--dataset-root DIR]
     python -m native_runner.review page    REVIEW_JSON [--output HTML]
     python -m native_runner.review explain REVIEW_JSON [--player OWNER] [--effort LEVEL] [--show-request]
+    python -m native_runner.review summary REVIEW_DIR
 
 ``select`` and ``analyze`` never touch the battle engine.  Between them, build
 the cache from the selected dataset with ``native_runner.training.v4.cache_builder``.
 ``analyze`` writes a review JSON and its report page per match; ``page`` redraws
 the page from an existing JSON; ``explain`` asks Claude for written commentary
-and adds it to both.
+and adds it to both; ``summary`` tabulates every review in a directory.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from typing import Any, Mapping, Sequence
 from ..paths import REPOSITORY_ROOT
 from ..training.v4.policy_session import load_policy_v4
 from .page import render_page
-from .report import MatchContext, build_review, fidelity_report, render_summary
+from .report import MatchContext, build_review, fidelity_report, render_review_table, render_summary
 from .scoring import score_sequence
 from .sources import iter_cached_replays, list_cached_replays, load_replay_payloads, match_context, select_replays
 
@@ -113,6 +114,15 @@ def _page(args: argparse.Namespace) -> int:
     destination = args.output or args.review_json.with_suffix(".html")
     destination.write_text(render_page(review), encoding="utf-8")
     print(f"已写入 {destination}")
+    return 0
+
+
+def _summary(args: argparse.Namespace) -> int:
+    paths = sorted(args.review_dir.glob("*.review.json"))
+    if not paths:
+        print(f"{args.review_dir} 里没有 *.review.json", file=sys.stderr)
+        return 1
+    print(render_review_table([json.loads(path.read_text(encoding="utf-8")) for path in paths]))
     return 0
 
 
@@ -211,6 +221,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     explain.add_argument("--effort", default="high", choices=("low", "medium", "high", "xhigh", "max"))
     explain.add_argument("--show-request", action="store_true", help="print what would be sent; call nothing")
     explain.set_defaults(run=_explain)
+
+    summary = commands.add_parser("summary", help="tabulate every review JSON in a directory")
+    summary.add_argument("review_dir", type=Path)
+    summary.set_defaults(run=_summary)
 
     args = parser.parse_args(argv)
     return int(args.run(args))

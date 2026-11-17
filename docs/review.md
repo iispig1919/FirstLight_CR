@@ -1,6 +1,6 @@
 # 对局复盘
 
-[中文首页](../README.zh-CN.md) · [训练指南](training.md) · [系统架构](architecture.md)
+[中文首页](../README.zh-CN.md) · [训练指南](training.md) · [系统架构](architecture.md) · [测试流程](review_test_plan.md)
 
 离线分析器把一场回放在引擎里重演，再让模型逐帧评价：局势如何、此刻该不该出牌、出哪张、放哪里。每场对局得到一个可以直接用浏览器打开的报告页面和一份 JSON。它复用模仿学习的重演缓存，所以**引擎只在重演那一步需要**，挑选对局和复盘本身都是纯 Python。
 
@@ -68,6 +68,12 @@ python -m native_runner.review analyze runs/review/cache/index.json --dataset-ro
 | 未能评分的出牌 | 真实对局里有、但重演无法对齐的动作 |
 
 在时间线上悬停会同时显示那一刻的全部数值；聚焦时间线后可以用左右方向键逐秒移动。时间线下方的“查看数据表”给出同样的数字，每秒一行。
+
+一次复盘了很多局时，可以把整个目录汇成一张表，表格下方还有几项跨对局的检查（胜方的终局局势值是否更高、漏水估计与来源统计差多少、有多少出牌没能评分）：
+
+```sh
+python -m native_runner.review summary runs/review/out
+```
 
 页面模板改动后，可以不重新打分、直接从已有的 JSON 重画：
 

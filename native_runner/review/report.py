@@ -604,3 +604,102 @@ def render_summary(review: Mapping[str, Any]) -> str:
                     + (f"，期间己方出牌：{cards}" if cards else "")
                 )
     return "\n".join(lines)
+
+
+SUMMARY_COLUMNS = (
+    "回放",
+    "判定",
+    "玩家",
+    "结果",
+    "可信帧",
+    "已评分",
+    "未评分",
+    "选牌一致",
+    "时机一致",
+    "等待一致",
+    "落点偏差",
+    "漏水估计",
+    "漏水来源",
+    "终局局势",
+    "转折",
+    "错过",
+    "讲解",
+)
+
+
+def _summary_row(review: Mapping[str, Any], player: Mapping[str, Any]) -> tuple[str, ...]:
+    summary = player["summary"]
+    agreement = summary["agreement"]
+    unscored = player["unscored_source_actions"]
+    return (
+        str(review["replay_tag"]),
+        review["fidelity"]["verdict"],
+        str(player["owner"]),
+        _RESULT_TEXT.get(player["result"], "—"),
+        f"{summary['trusted_frames']}/{summary['frames']}",
+        str(summary["actions"]),
+        "—" if unscored is None else str(len(unscored)),
+        _percent(agreement["same_card"]),
+        _percent(agreement["act_when_player_acted"]),
+        _percent(agreement["wait_when_player_waited"]),
+        _number(agreement["median_cell_distance"], 1),
+        _number(summary["elixir"]["leaked_estimate"], 1),
+        _number(summary["elixir"]["leaked_reported_by_source"], 1),
+        _number(summary["value"]["end"]),
+        str(len(player["swings"])),
+        str(len(player["missed_windows"])),
+        "有" if player.get("commentary") else "无",
+    )
+
+
+def render_review_table(reviews: Sequence[Mapping[str, Any]]) -> str:
+    """Render many reviews as one Markdown table plus cross-match checks.
+
+    The checks only use faithful reconstructions.  They ask whether the numbers
+    hang together across matches: does the winner end with the higher value,
+    does the leak estimate track the source's own figure, and how many source
+    actions could not be scored.
+    """
+
+    lines = ["| " + " | ".join(SUMMARY_COLUMNS) + " |", "|" + " --- |" * len(SUMMARY_COLUMNS)]
+    for review in reviews:
+        lines += ["| " + " | ".join(_summary_row(review, player)) + " |" for player in review["players"]]
+
+    verdicts: dict[str, int] = {}
+    for review in reviews:
+        verdicts[review["fidelity"]["verdict"]] = verdicts.get(review["fidelity"]["verdict"], 0) + 1
+    faithful = [review for review in reviews if review["fidelity"]["verdict"] == "faithful"]
+    decided = winner_ahead = 0
+    leak_gaps: list[float] = []
+    scored = unscored = 0
+    for review in faithful:
+        ends = {player["result"]: player["summary"]["value"]["end"] for player in review["players"]}
+        if set(ends) == {"win", "loss"} and None not in ends.values():
+            decided += 1
+            winner_ahead += ends["win"] > ends["loss"]
+        for player in review["players"]:
+            elixir = player["summary"]["elixir"]
+            if elixir["leaked_reported_by_source"] is not None and elixir["leaked_estimate"] is not None:
+                leak_gaps.append(abs(elixir["leaked_estimate"] - elixir["leaked_reported_by_source"]))
+            if player["unscored_source_actions"] is not None:
+                scored += player["summary"]["actions"]
+                unscored += len(player["unscored_source_actions"])
+    lines += [
+        "",
+        f"对局数：{len(reviews)}（" + "，".join(f"{name} {count}" for name, count in sorted(verdicts.items())) + "）",
+        "以下只统计 faithful 的对局：",
+        f"- 胜方终局局势值高于负方：{winner_ahead}/{decided}"
+        if decided
+        else "- 胜方终局局势值高于负方：没有可比的对局",
+        (
+            f"- 漏水估计与来源统计的平均差距：{sum(leak_gaps) / len(leak_gaps):.2f}（{len(leak_gaps)} 名玩家）"
+            if leak_gaps
+            else "- 漏水估计与来源统计的平均差距：没有来源统计"
+        ),
+        (
+            f"- 未能评分的出牌：{unscored}/{scored + unscored}（{unscored / (scored + unscored):.1%}）"
+            if scored + unscored
+            else "- 未能评分的出牌：没有来源动作可比"
+        ),
+    ]
+    return "\n".join(lines)
