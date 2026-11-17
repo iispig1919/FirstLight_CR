@@ -13,12 +13,21 @@ from dataclasses import dataclass
 import torch
 
 from native_runner.contracts import (
+    ENTITY_RUNTIME_SEMANTIC_FIELDS,
+    PLAYER_RUNTIME_SEMANTIC_FIELDS,
+    AbilityPhase,
+    AbilityRuntimeStateV1,
     ActionKind,
     ActionMaskV1,
     ActionV1,
+    CausalGroupKind,
+    CausalGroupRefV1,
+    EntityStateV1,
     ObservationTier,
     ObservationV1,
     PlayerStateV1,
+    SemanticEvidenceLevel,
+    SemanticProvenanceV1,
     TimeStateV1,
     TowerStateV1,
 )
@@ -39,6 +48,10 @@ from native_runner.training.v4.tensorizer import UniversalObservationTensorizerV
 GRID_WIDTH = 18
 GRID_HEIGHT = 32
 OWN_HALF_ROWS = 15
+HERO_CARD_ID = STANDARD_DECK[0]
+HERO_ENTITY_ID = 501
+HERO_ABILITY_ID = "Knight_hero_Ability"
+HERO_ABILITY_COST = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,8 +97,51 @@ def _towers(damage_to_owner: dict[int, float]) -> tuple[TowerStateV1, ...]:
     )
 
 
+def _provenance(fields: tuple[str, ...], known: str) -> SemanticProvenanceV1:
+    return SemanticProvenanceV1(
+        field_evidence={
+            name: SemanticEvidenceLevel.NATIVE_DERIVED if name == known else SemanticEvidenceLevel.UNKNOWN
+            for name in fields
+        }
+    )
+
+
+def _hero(owner: int) -> EntityStateV1:
+    """A deployed hero whose ability is ready, as the engine reports it."""
+
+    ability = AbilityRuntimeStateV1(
+        ability_id=HERO_ABILITY_ID,
+        source_entity=HERO_ENTITY_ID,
+        phase=AbilityPhase.READY,
+        elixir_cost=HERO_ABILITY_COST,
+        available=True,
+        attributes={"source_card_id": HERO_CARD_ID, "controller_slot": 0},
+    )
+    return EntityStateV1(
+        entity_id=HERO_ENTITY_ID,
+        owner=owner,
+        card_id=HERO_CARD_ID,
+        entity_kind="hero",
+        position=(9000, 12000 if owner == 0 else 20000),
+        hitpoints=1000.0,
+        max_hitpoints=1766.0,
+        causal_group=CausalGroupRefV1(
+            kind=CausalGroupKind.DEPLOYMENT, handle=f"deploy:1:{HERO_ENTITY_ID}", source_card_id=HERO_CARD_ID
+        ),
+        ability_states=(ability,),
+        runtime_provenance=_provenance(ENTITY_RUNTIME_SEMANTIC_FIELDS, "ability_states"),
+    )
+
+
 def _observation(
-    *, owner: int, tick: int, elixir: float, hand: tuple[int, ...], cycle: tuple[int, ...], damage: dict[int, float]
+    *,
+    owner: int,
+    tick: int,
+    elixir: float,
+    hand: tuple[int, ...],
+    cycle: tuple[int, ...],
+    damage: dict[int, float],
+    hero: bool = False,
 ) -> ObservationV1:
     legal_rows = set(own_half_native_rows(owner))
     rows = [[y in legal_rows] * GRID_WIDTH for y in range(GRID_HEIGHT)]
@@ -111,6 +167,14 @@ def _observation(
             "hand_slot_by_card": {str(card_id): slot for slot, card_id in enumerate(hand)},
             "hand_runtime_by_slot": {str(slot): {"form_code": 0} for slot in range(len(hand))},
         },
+        **(
+            {
+                "ability_runtime_states": _hero(owner).ability_states,
+                "runtime_provenance": _provenance(PLAYER_RUNTIME_SEMANTIC_FIELDS, "ability_runtime_states"),
+            }
+            if hero
+            else {}
+        ),
     )
     opponent = PlayerStateV1(owner=1 - owner)
     return ObservationV1(
@@ -122,10 +186,16 @@ def _observation(
         time=TimeStateV1(elapsed_ms=tick * 50, remaining_ms=max(0, 180_000 - tick * 50), elixir_multiplier=1.0),
         players=tuple(sorted((actor, opponent), key=lambda player: player.owner)),
         towers=_towers(damage),
+        entities=(_hero(owner),) if hero else (),
         action_mask=ActionMaskV1(
-            kinds={ActionKind.WAIT.value: True, ActionKind.PLAY_CARD.value: True},
+            kinds={
+                ActionKind.WAIT.value: True,
+                ActionKind.PLAY_CARD.value: True,
+                ActionKind.ACTIVATE_ABILITY.value: hero,
+            },
             hand_slots=tuple(card_cost(card_id) <= elixir for card_id in hand),
             placement_masks=placements,
+            ability_sources=(HERO_ENTITY_ID,) if hero else (),
             reasons={"effective_elixir": elixir, "reserved_elixir": 0.0},
         ),
     )
@@ -136,14 +206,20 @@ def synthetic_owner_sequence(
     owner: int = 0,
     frames: int = 12,
     plays: tuple[SyntheticPlay, ...] = (),
+    ability_frames: tuple[int, ...] = (),
     start_elixir: float = 5.0,
     elixir_per_frame: float = 0.09,
     damage_per_frame: float = 0.0,
     untrusted_from_frame: int | None = None,
     sequence_id: str = "",
 ) -> ILSequenceV4:
-    """Tensorize a scripted single-owner timeline into one IL sequence."""
+    """Tensorize a scripted single-owner timeline into one IL sequence.
 
+    ``ability_frames`` puts a hero with a ready ability on the field for the
+    whole timeline and has the player activate it on those frames.
+    """
+
+    hero = bool(ability_frames)
     bundle = production_semantic_bundle()
     tensorizer = UniversalObservationTensorizerV4(
         actor_owner=owner,
@@ -153,7 +229,7 @@ def synthetic_owner_sequence(
         effect_catalog=bundle.effect_catalog,
         card_specs=bundle.card_specs,
         deck=STANDARD_DECK,
-        deck_roles={card_id: (False, False) for card_id in STANDARD_DECK},
+        deck_roles={card_id: (hero and card_id == HERO_CARD_ID, False) for card_id in STANDARD_DECK},
     )
     plays_by_frame = {play.frame: play for play in plays}
     hand = tuple(STANDARD_DECK[:4])
@@ -165,7 +241,13 @@ def synthetic_owner_sequence(
     for frame in range(frames):
         tick = FIRST_POLICY_DECISION_TICK + frame * POLICY_DECISION_TICKS
         observation = _observation(
-            owner=owner, tick=tick, elixir=elixir, hand=hand, cycle=cycle, damage={1 - owner: damage_per_frame * frame}
+            owner=owner,
+            tick=tick,
+            elixir=elixir,
+            hand=hand,
+            cycle=cycle,
+            damage={1 - owner: damage_per_frame * frame},
+            hero=hero,
         )
         if frame == 0:
             tensorizer.start_episode(observation, initial_elixir=None)
@@ -181,6 +263,18 @@ def synthetic_owner_sequence(
                 TimedExpertActionV4(
                     source_tick=tick + play.delay_ticks,
                     action=ActionV1.play(owner, play.hand_position, play.native_cell, card_id=wanted),
+                ),
+            )
+        if frame in ability_frames:
+            window = (
+                TimedExpertActionV4(
+                    source_tick=tick,
+                    action=ActionV1(
+                        owner=owner,
+                        kind=ActionKind.ACTIVATE_ABILITY,
+                        source_entity=HERO_ENTITY_ID,
+                        ability_id=HERO_ABILITY_ID,
+                    ),
                 ),
             )
         usable = True
@@ -206,7 +300,9 @@ def synthetic_owner_sequence(
         actions.append(sequence)
         label_usable.append(usable)
         elixir = min(10.0, elixir + elixir_per_frame)
-        if play is not None and usable:
+        if frame in ability_frames and usable:
+            elixir -= HERO_ABILITY_COST
+        elif play is not None and usable:
             played = hand[play.hand_position]
             elixir -= card_cost(played)
             hand = hand[: play.hand_position] + (cycle[0],) + hand[play.hand_position + 1 :]

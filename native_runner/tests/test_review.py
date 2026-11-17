@@ -41,6 +41,8 @@ from native_runner.review.sources import (
     select_replays,
 )
 from native_runner.tests.review_helpers import (
+    HERO_ABILITY_COST,
+    HERO_CARD_ID,
     SyntheticPlay,
     scripted_review,
     synthetic_owner_sequence,
@@ -180,6 +182,37 @@ def test_options_and_model_choice_follow_the_policy_distribution(model, owner0_s
     broke = synthetic_owner_sequence(owner=0, frames=2, start_elixir=1.0)
     (empty, _) = score_sequence(model, broke)
     assert empty.options == () and empty.model_choice is None and empty.act_probability == 0.0
+
+
+def test_abilities_are_scored_and_named_after_the_card_that_owns_them(model) -> None:
+    sequence = synthetic_owner_sequence(
+        owner=1, frames=8, plays=(SyntheticPlay(frame=5, hand_position=1, native_cell=(14, 21)),), ability_frames=(2,)
+    )
+
+    frames = score_sequence(model, sequence)
+
+    (ability,) = frames[2].played
+    assert (ability.kind, ability.card_id, ability.cost) == ("activate_ability", HERO_CARD_ID, HERO_ABILITY_COST)
+    assert ability.cell is None and ability.cell_probability is None and ability.top_cells == ()
+    # The hero card is also in hand, so the ability and the card are separate options.
+    kinds = {option.kind for option in frames[2].options if option.card_id == HERO_CARD_ID}
+    assert kinds == {"activate_ability", "play_card"}
+    matching = next(option for option in frames[2].options if option.kind == "activate_ability")
+    assert ability.card_probability == pytest.approx(matching.probability, abs=1e-5)
+    assert frames[3].elixir == pytest.approx(frames[2].elixir + 0.09 - HERO_ABILITY_COST, abs=0.01)
+
+    context = PlayerContext(source_actions=((ability.tick, None), (frames[5].played[0].tick, STANDARD_DECK[1])))
+    player = build_player_review(1, frames, context=context)
+    first, second = player["actions"]
+    assert (first["kind"], first["card"]["id"], first["cell"], first["zone"]) == (
+        "activate_ability",
+        HERO_CARD_ID,
+        None,
+        None,
+    )
+    assert first["cell_distance"] is None and first["top_cells"] == [] and first["model_choice"] is not None
+    assert second["kind"] == "play_card" and second["cell"] == [3, 10]
+    assert player["unscored_source_actions"] == []
 
 
 def _frame(index: int, **changes: object) -> FrameScore:

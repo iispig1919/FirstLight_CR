@@ -214,9 +214,13 @@ class _FrameDecoder:
 
     def describe(self, row: int) -> tuple[str, int, str, float]:
         candidates = self.batch.candidates
+        card_id = int(candidates.native_visible_card_id[0, row])
+        if card_id < 0:
+            # Ability candidates carry no hand card; name them after the card that owns the ability.
+            card_id = self.model.catalog.raw_card_id(int(candidates.visible_card_vocab_id[0, row])) or -1
         return (
             ACTION_KIND[int(candidates.variant[0, row])],
-            int(candidates.native_visible_card_id[0, row]),
+            card_id,
             FORM_LABEL.get(int(candidates.effective_form[0, row]), "normal"),
             float(candidates.cost[0, row]),
         )
