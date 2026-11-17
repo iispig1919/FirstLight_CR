@@ -115,6 +115,11 @@ def _page(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # A redirected Windows console may not encode every character of the Chinese summary.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="replace")
     parser = argparse.ArgumentParser(prog="python -m native_runner.review", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
 
