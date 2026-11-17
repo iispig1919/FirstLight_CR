@@ -7,4 +7,5 @@ safetensors==0.4.5
 sc-compression==0.6.5
 zstandard==0.25.0
 wandb==0.22.3
+anthropic==2.9.0
 tzdata

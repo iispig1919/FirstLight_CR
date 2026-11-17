@@ -122,7 +122,7 @@ Copy-Item .env.example .env
 | [系统架构](docs/architecture.md) | 环境、策略、训练与回放的源码导览 |
 | [模型](checkpoints/README.md) | 模型选择、加载与评测指标 |
 | [策略服务](docs/policy_service.md) | 循环策略的对局生命周期与请求协议 |
-| [对局复盘](docs/review.md) | 用模型逐帧评价重演对局，生成报告页面：局势曲线、选牌与落点分歧、错过的时机 |
+| [对局复盘](docs/review.md) | 用模型逐帧评价重演对局，生成报告页面和文字讲解：局势曲线、选牌与落点分歧、错过的时机 |
 | [兼容性数据](native_runner/data/competitive/README.md) | 卡牌支持、模型目录与版本维护 |
 | [检查指南](docs/validation.md) | 环境检查、测试命令与运行结果检查 |
 

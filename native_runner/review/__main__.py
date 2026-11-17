@@ -4,11 +4,13 @@
     python -m native_runner.review list    CACHE_INDEX
     python -m native_runner.review analyze CACHE_INDEX --output DIR [--tag TAG] [--dataset-root DIR]
     python -m native_runner.review page    REVIEW_JSON [--output HTML]
+    python -m native_runner.review explain REVIEW_JSON [--player OWNER] [--effort LEVEL] [--show-request]
 
 ``select`` and ``analyze`` never touch the battle engine.  Between them, build
 the cache from the selected dataset with ``native_runner.training.v4.cache_builder``.
 ``analyze`` writes a review JSON and its report page per match; ``page`` redraws
-the page from an existing JSON.
+the page from an existing JSON; ``explain`` asks Claude for written commentary
+and adds it to both.
 """
 
 from __future__ import annotations
@@ -114,6 +116,60 @@ def _page(args: argparse.Namespace) -> int:
     return 0
 
 
+def _explain(args: argparse.Namespace) -> int:
+    # The Claude SDK is only needed here, so the other commands work without it.
+    import anthropic
+
+    from .commentary import CommentaryError, build_brief, commentary_request, render_commentary, request_commentary
+
+    review = json.loads(args.review_json.read_text(encoding="utf-8"))
+    owners = args.player or [int(player["owner"]) for player in review["players"]]
+    if args.show_request:
+        for owner in owners:
+            request = commentary_request(build_brief(review, owner), effort=args.effort)
+            print(json.dumps(request, ensure_ascii=False, indent=2))
+        return 0
+
+    page = args.review_json.with_suffix(".html")
+    try:
+        client = anthropic.Anthropic()
+        for owner in owners:
+            commentary = request_commentary(build_brief(review, owner), client=client, effort=args.effort)
+            next(player for player in review["players"] if int(player["owner"]) == owner)["commentary"] = commentary
+            # Save after every player so a later failure keeps the commentary already paid for.
+            args.review_json.write_text(json.dumps(review, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+            page.write_text(render_page(review), encoding="utf-8")
+            usage = commentary["usage"]
+            print(
+                f"玩家 {owner} 的讲解（{commentary['model']}，"
+                f"输入 {usage['input_tokens']} / 输出 {usage['output_tokens']} tokens）\n"
+            )
+            print(render_commentary(commentary) + "\n", flush=True)
+    except TypeError as error:
+        # The SDK reports missing credentials as a TypeError when the request is built.
+        if "authentication" not in str(error):
+            raise
+        print("没有找到 Claude API 凭据。请先设置环境变量 ANTHROPIC_API_KEY。", file=sys.stderr)
+        return 1
+    except anthropic.AuthenticationError:
+        print("Claude API 拒绝了这个密钥，请检查 ANTHROPIC_API_KEY。", file=sys.stderr)
+        return 1
+    except anthropic.RateLimitError:
+        print("Claude API 限流了，稍后再试。", file=sys.stderr)
+        return 1
+    except anthropic.APIStatusError as error:
+        print(f"Claude API 返回错误 {error.status_code}：{error.message}", file=sys.stderr)
+        return 1
+    except anthropic.APIConnectionError as error:
+        print(f"连接不上 Claude API：{error}", file=sys.stderr)
+        return 1
+    except CommentaryError as error:
+        print(f"没有得到可用的讲解：{error}", file=sys.stderr)
+        return 1
+    print(f"已写入 {args.review_json} 和 {page.name}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # A redirected Windows console may not encode every character of the Chinese summary.
     for stream in (sys.stdout, sys.stderr):
@@ -148,6 +204,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     page.add_argument("review_json", type=Path)
     page.add_argument("--output", type=Path, default=None, help="default: next to the JSON, with .html")
     page.set_defaults(run=_page)
+
+    explain = commands.add_parser("explain", help="ask Claude for written commentary and add it to the review")
+    explain.add_argument("review_json", type=Path)
+    explain.add_argument("--player", type=int, action="append", default=[], help="owner seat; default is both")
+    explain.add_argument("--effort", default="high", choices=("low", "medium", "high", "xhigh", "max"))
+    explain.add_argument("--show-request", action="store_true", help="print what would be sent; call nothing")
+    explain.set_defaults(run=_explain)
 
     args = parser.parse_args(argv)
     return int(args.run(args))

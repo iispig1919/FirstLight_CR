@@ -11,6 +11,7 @@
 | 1. 挑对局 | `python -m native_runner.review select` | 否 |
 | 2. 重演 | `python -m native_runner.training.v4.cache_builder` | 是 |
 | 3. 复盘 | `python -m native_runner.review analyze` | 否 |
+| 4. 文字讲解（可选） | `python -m native_runner.review explain` | 否，需要 Claude API 密钥 |
 
 以下命令都在仓库根目录执行，每条都是单行，Windows 和 Linux 通用。Windows 下把 `python` 换成 `.\.venv\Scripts\python.exe`。
 
@@ -74,6 +75,26 @@ python -m native_runner.review analyze runs/review/cache/index.json --dataset-ro
 python -m native_runner.review page runs/review/out/<回放 ID>.review.json
 ```
 
+## 文字讲解
+
+`explain` 把一份复盘的要点发给 Claude Opus 5.5，让它像教练一样写一段讲解：这局的走向、几个值得回看的时刻、反复出现的习惯问题和下一局可以尝试的做法。讲解会写回 `review.json`，并显示在报告页面顶部；点击某个时刻会在时间线上框出那一段。
+
+先安装依赖（`requirements.txt` 里已包含 `anthropic`），并把密钥放进环境变量 `ANTHROPIC_API_KEY`。PowerShell 下是 `$env:ANTHROPIC_API_KEY = "你的密钥"`，Linux 下是 `export ANTHROPIC_API_KEY=你的密钥`。然后：
+
+```sh
+python -m native_runner.review explain runs/review/out/<回放 ID>.review.json
+```
+
+| 选项 | 作用 |
+| --- | --- |
+| `--player 0` | 只讲解某一方（引擎座位 0 或 1，与页面上的标签一致）；默认两方各讲一次，每方一次请求 |
+| `--effort` | 思考力度，`low` 到 `max`，默认 `high` |
+| `--show-request` | 只打印将要发送的内容，不调用 API，不花钱 |
+
+每次请求完成后会打印实际用掉的 token 数。请求启用了服务端回退：如果安全分类器误拒，API 会自动换用推荐的模型重试，页面上显示的是实际作答的模型。
+
+Claude 看到的只是复盘数据的摘要：双方出牌的时间、卡牌和位置，你的圣水，双方塔血，以及对战模型的评价。它看不到场上单位的交战过程，也不知道对手的手牌和圣水，所以讲解里关于“为什么”的部分是结合卡牌常识的推测，提示词要求它把推测明确说成推测。
+
 ## 重演保真度
 
 回放只记录稀疏的出牌动作，重演结果不一定等于真实对局。每份复盘都带一个判定：
@@ -97,6 +118,7 @@ python -m native_runner.review page runs/review/out/<回放 ID>.review.json
 | `swings` | 5 秒窗口内局势值变化最大的几段，附期间双方的出牌 |
 | `unscored_source_actions` | 真实对局里有、但重演无法对齐评分的出牌 |
 | `timeline` | 每 0.25 秒一帧的局势值、出牌意愿、圣水、双方塔血 |
+| `commentary` | 运行过 `explain` 后才有：讲解正文、各时刻对应的时间段、作答的模型和 token 用量 |
 
 约定：
 
