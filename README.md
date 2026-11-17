@@ -123,6 +123,7 @@ Use `--games` for the match count, `--match-config` for decks and levels, and `-
 | [Architecture](docs/architecture.md) | Environment, policy, training, and replay source map |
 | [Models](checkpoints/README.md) | Model selection, loading, and evaluation metrics |
 | [Policy service](docs/policy_service.md) | Recurrent episode lifecycle and request protocol |
+| [Match review](docs/review.md) | Frame-by-frame model review of reconstructed matches (guide in Chinese) |
 | [Compatibility data](native_runner/data/competitive/README.md) | Card support, model catalogs, and version maintenance |
 | [Checks](docs/validation.md) | Environment checks, tests, and runtime result checks |
 

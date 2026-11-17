@@ -9,6 +9,7 @@ htmlcov/
 .venv/
 venv/
 /runs/
+/datasets/
 /training_replays/
 /wandb/
 /evaluations/
