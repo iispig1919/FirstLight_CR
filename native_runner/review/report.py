@@ -36,6 +36,7 @@ DISAGREEMENT_LIMIT = 5
 PLACEMENT_LIMIT = 3
 PLACEMENT_MINIMUM_DISTANCE = 3.0
 ACT_THRESHOLD = 0.5
+FORM_PREFIX = {"evolution": "觉醒", "hero": "精英", "hero_active": "精英"}
 
 CONVENTIONS = {
     "tick_rate_hz": TICKS_PER_SECOND,
@@ -78,6 +79,13 @@ def card_label(card_id: int) -> dict[str, Any]:
     return {"id": card_id, "name": name, "name_en": english}
 
 
+def display_name(card_id: int, form: str, kind: str) -> str:
+    """Name a play the way a player would: the form first, abilities marked."""
+
+    name = FORM_PREFIX.get(form, "") + card_label(card_id)["name"]
+    return f"{name}（技能）" if kind == "activate_ability" else name
+
+
 def zone_label(cell: Sequence[int]) -> str:
     x, y = cell
     if y <= 6:
@@ -105,6 +113,7 @@ def _towers(towers: TowerHitpoints) -> list[int]:
 
 def _option(option: CardOption) -> dict[str, Any]:
     return {
+        "name": display_name(option.card_id, option.form, option.kind),
         "card": card_label(option.card_id),
         "kind": option.kind,
         "form": option.form,
@@ -117,6 +126,7 @@ def _model_choice(choice: ModelChoice | None, *, played: PlayedAction | None = N
     if choice is None:
         return None
     result = {
+        "name": display_name(choice.card_id, choice.form, choice.kind),
         "card": card_label(choice.card_id),
         "kind": choice.kind,
         "form": choice.form,
@@ -161,6 +171,7 @@ def player_actions(frames: Sequence[FrameScore]) -> list[dict[str, Any]]:
                     "tick": action.tick,
                     "time": clock(action.tick),
                     "kind": action.kind,
+                    "name": display_name(action.card_id, action.form, action.kind),
                     "card": card_label(action.card_id),
                     "form": action.form,
                     "cost": _rounded(action.cost, 2),
@@ -490,7 +501,7 @@ def _percent(value: float | None) -> str:
 def _choice_text(choice: Mapping[str, Any] | None) -> str:
     if choice is None:
         return "—"
-    text = f"{choice['card']['name']}（{_percent(choice['card_probability'])}）"
+    text = f"{choice['name']}（{_percent(choice['card_probability'])}）"
     if choice["cell"] is not None:
         text += f" → {choice['zone']} {tuple(choice['cell'])}"
     return text
@@ -553,7 +564,7 @@ def render_summary(review: Mapping[str, Any]) -> str:
             for action in sorted(disputed, key=lambda action: action["tick"]):
                 where = f" → {action['zone']} {tuple(action['cell'])}" if action["cell"] is not None else ""
                 lines.append(
-                    f"    {action['time']} {action['card']['name']}{where}，"
+                    f"    {action['time']} {action['name']}{where}，"
                     f"模型给这张牌 {_percent(action['card_probability'])}，"
                     f"更想出 {_choice_text(action['model_choice'])}"
                 )
@@ -569,7 +580,7 @@ def render_summary(review: Mapping[str, Any]) -> str:
             lines.append("  落点分歧最大的出牌：")
             for action in sorted(misplaced, key=lambda action: action["tick"]):
                 lines.append(
-                    f"    {action['time']} {action['card']['name']} 放在 {action['zone']} {tuple(action['cell'])}，"
+                    f"    {action['time']} {action['name']} 放在 {action['zone']} {tuple(action['cell'])}，"
                     f"模型同一张牌首选 {zone_label(action['model_cell'])} {tuple(action['model_cell'])}"
                     f"（相距 {_number(action['cell_distance'], 1)} 格，"
                     f"你的落点排第 {action['cell_rank']}/{action['legal_cell_count']}）"
@@ -586,7 +597,7 @@ def render_summary(review: Mapping[str, Any]) -> str:
         if player["swings"]:
             lines.append("  局势转折（5 秒窗口）：")
             for swing in player["swings"]:
-                cards = "、".join(player["actions"][index]["card"]["name"] for index in swing["own_actions"])
+                cards = "、".join(player["actions"][index]["name"] for index in swing["own_actions"])
                 lines.append(
                     f"    {swing['time']} 局势 {swing['value_change']:+.2f}"
                     f"（{_number(swing['value_start'])} → {_number(swing['value_end'])}）"

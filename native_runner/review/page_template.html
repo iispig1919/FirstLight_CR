@@ -671,7 +671,7 @@ footer p + p { margin-top: 4px; }
         if (value === null || value === undefined) { return; }
         var group = svg("g", {
           class: "marker" + (disputed(action) ? " disputed" : ""), tabindex: "0", role: "button",
-          "aria-label": action.time + " " + action.card.name + (disputed(action) ? "，模型不认同选牌" : ""),
+          "aria-label": action.time + " " + action.name + (disputed(action) ? "，模型不认同选牌" : ""),
           transform: "translate(" + context.xOfTick(action.tick).toFixed(1) + "," + yOf(value).toFixed(1) + ")"
         });
         group.appendChild(svg("circle", { class: "hit", r: 12 }));
@@ -740,13 +740,13 @@ footer p + p { margin-top: 4px; }
     tooltip.appendChild(tooltipRow(num(context.enemyTotal[frame], 0), "对方塔血", "var(--series-opponent)"));
     var near = player().actions.filter(function (action) { return Math.abs(action.tick - timeline.tick[frame]) <= TPS / 2; });
     if (near.length) {
-      tooltip.appendChild(el("div", { class: "played" }, "出牌：" + near.map(function (action) { return action.card.name; }).join("、")));
+      tooltip.appendChild(el("div", { class: "played" }, "出牌：" + near.map(function (action) { return action.name; }).join("、")));
     }
     var theirs = opponent() ? opponent().actions.filter(function (action) {
       return Math.abs(action.tick - timeline.tick[frame]) <= TPS / 2;
     }) : [];
     if (theirs.length) {
-      tooltip.appendChild(el("div", { class: "played" }, "对方出牌：" + theirs.map(function (action) { return action.card.name; }).join("、")));
+      tooltip.appendChild(el("div", { class: "played" }, "对方出牌：" + theirs.map(function (action) { return action.name; }).join("、")));
     }
     tooltip.hidden = false;
     var hostBox = context.host.getBoundingClientRect();
@@ -848,14 +848,14 @@ footer p + p { margin-top: 4px; }
       row.appendChild(el("td", { class: "when" }, action.time));
       var card = el("td");
       card.appendChild(el("span", { class: "dot-inline" + (disputed(action) ? " disputed" : ""), "aria-hidden": "true" }));
-      card.appendChild(document.createTextNode(action.card.name + (action.kind === "activate_ability" ? "（技能）" : "")));
+      card.appendChild(document.createTextNode(action.name));
       row.appendChild(card);
       row.appendChild(el("td", {}, action.zone ? action.zone + " " + cellText(action.cell) : "—"));
       row.appendChild(el("td", { class: "num" }, num(action.elixir_before, 1)));
       row.appendChild(el("td", { class: "num" }, pct(action.act_probability)));
       row.appendChild(el("td", { class: "num" }, pct(action.card_probability)));
       var choice = action.model_choice;
-      row.appendChild(el("td", {}, !choice ? "—" : choice.same_card ? "相同" : choice.card.name + " " + pct(choice.card_probability)));
+      row.appendChild(el("td", {}, !choice ? "—" : choice.same_card ? "相同" : choice.name + " " + pct(choice.card_probability)));
       row.appendChild(el("td", { class: "num" }, action.cell_rank ? action.cell_rank + "/" + action.legal_cell_count : "—"));
       row.appendChild(el("td", { class: "num" }, signed(action.value_change)));
       makeClickable(row, function () { selectAction(action.index, false); });
@@ -972,8 +972,7 @@ footer p + p { margin-top: 4px; }
       host.appendChild(el("p", { class: "empty" }, "在表格里选一次出牌，或点击时间线上的圆点，查看模型对这一步的看法。"));
       return;
     }
-    host.appendChild(el("div", { class: "title" }, action.time + " " + action.card.name +
-      (action.kind === "activate_ability" ? "（技能）" : "") + "，" + num(action.cost, 0) + " 费"));
+    host.appendChild(el("div", { class: "title" }, action.time + " " + action.name + "，" + num(action.cost, 0) + " 费"));
     host.appendChild(el("div", { class: "where" }, action.cell ? action.zone + " " + cellText(action.cell) : "没有落点"));
 
     var facts = el("dl", { class: "facts" });
@@ -987,7 +986,7 @@ footer p + p { margin-top: 4px; }
     fact(facts, "5 秒后局势变化", signed(action.value_change));
     var preferred = action.model_choice;
     if (preferred) {
-      fact(facts, "模型此刻首选", preferred.same_card ? "同一张牌" : preferred.card.name + " " + pct(preferred.card_probability));
+      fact(facts, "模型此刻首选", preferred.same_card ? "同一张牌" : preferred.name + " " + pct(preferred.card_probability));
       if (!preferred.same_card && preferred.cell) { fact(facts, "模型首选的落点", preferred.zone + " " + cellText(preferred.cell)); }
     }
     host.appendChild(facts);
@@ -998,7 +997,7 @@ footer p + p { margin-top: 4px; }
     }
 
     if (action.cell && action.top_cells.length) {
-      host.appendChild(el("h3", {}, "落点：" + action.card.name));
+      host.appendChild(el("h3", {}, "落点：" + action.name));
       var wrap = el("div", { class: "arena-wrap" });
       var arena = drawArena(action);
       wrap.appendChild(arena.root);
@@ -1031,7 +1030,7 @@ footer p + p { margin-top: 4px; }
     var options = el("div", { class: "options" });
     action.options.forEach(function (option, index) {
       var mine = option.card.id === action.card.id && option.kind === action.kind;
-      var name = el("div", { class: "name" }, option.card.name + (option.kind === "activate_ability" ? "（技能）" : ""));
+      var name = el("div", { class: "name" }, option.name);
       var tags = [];
       if (mine) { tags.push("你出的"); }
       if (index === 0) { tags.push("模型首选"); }
@@ -1068,7 +1067,7 @@ footer p + p { margin-top: 4px; }
       row.appendChild(el("td", { class: "num" }, num(window.elixir_at_peak, 1)));
       row.appendChild(el("td", { class: "num" }, pct(window.peak_act_probability)));
       var choice = window.model_choice;
-      row.appendChild(el("td", {}, !choice ? "—" : choice.card.name + (choice.cell ? " → " + choice.zone + " " + cellText(choice.cell) : "")));
+      row.appendChild(el("td", {}, !choice ? "—" : choice.name + (choice.cell ? " → " + choice.zone + " " + cellText(choice.cell) : "")));
       makeClickable(row, function () { focusRange(window.start_tick, window.end_tick); });
       body.appendChild(row);
     });
@@ -1078,7 +1077,7 @@ footer p + p { margin-top: 4px; }
 
   function cardNames(actions, indices) {
     if (!indices || !indices.length) { return "—"; }
-    return indices.map(function (index) { return actions[index] ? actions[index].card.name : "?"; }).join("、");
+    return indices.map(function (index) { return actions[index] ? actions[index].name : "?"; }).join("、");
   }
 
   function renderSwings() {

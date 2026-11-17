@@ -48,7 +48,7 @@ from native_runner.tests.review_helpers import (
     synthetic_owner_sequence,
     synthetic_result,
 )
-from native_runner.training.v4.cache import write_il_cache_index, write_il_cache_shard
+from native_runner.training.v4.cache import _pad_dynamic_observation, write_il_cache_index, write_il_cache_shard
 from native_runner.training.v4.expert import FIRST_POLICY_DECISION_TICK, POLICY_DECISION_TICKS
 from native_runner.training.v4.factory import build_production_model_v4
 from native_runner.training.v4.learning import evaluate_recurrent_sequence
@@ -104,6 +104,44 @@ def test_scoring_matches_teacher_forced_evaluation(model, owner0_sequence, owner
             assert action.card_probability == pytest.approx(expected, abs=1e-5)
             expected_cell = math.exp(float(reference.components.target_log_prob[frame.index, 0, step]))
             assert action.cell_probability == pytest.approx(expected_cell, rel=1e-4, abs=1e-7)
+
+
+def _choice_key(choice: ModelChoice | None) -> tuple | None:
+    return None if choice is None else (choice.kind, choice.card_id, choice.cell)
+
+
+def test_scoring_is_unchanged_when_frames_differ_in_tensor_size(model, owner0_sequence, owner0_frames) -> None:
+    # A real reconstruction changes its candidate, effect and edge counts from frame to frame.
+    ragged = replace(
+        owner0_sequence,
+        observations=tuple(
+            _pad_dynamic_observation(
+                observation,
+                active_effect_count=int(observation.active_effects.mask.shape[1]) + index % 3,
+                relation_edge_count=int(observation.relation_edges.mask.shape[1]) + index % 4,
+                candidate_count=int(observation.candidates.mask.shape[1]) + index % 2,
+            )
+            for index, observation in enumerate(owner0_sequence.observations)
+        ),
+    )
+    for name in ("candidates", "relation_edges", "active_effects"):
+        assert len({int(getattr(item, name).mask.shape[1]) for item in ragged.observations}) > 1
+
+    frames = score_sequence(model, ragged)
+
+    for expected, actual in zip(owner0_frames, frames, strict=True):
+        assert actual.value == pytest.approx(expected.value, abs=1e-5)
+        assert actual.act_probability == pytest.approx(expected.act_probability, abs=1e-5)
+        assert [(option.kind, option.card_id) for option in actual.options] == [
+            (option.kind, option.card_id) for option in expected.options
+        ]
+        assert [option.probability for option in actual.options] == pytest.approx(
+            [option.probability for option in expected.options], abs=1e-5
+        )
+        assert [(action.card_id, action.cell, action.model_cell) for action in actual.played] == [
+            (action.card_id, action.cell, action.model_cell) for action in expected.played
+        ]
+        assert _choice_key(actual.model_choice) == _choice_key(expected.model_choice)
 
 
 def test_scoring_reports_frame_facts_in_the_players_own_view(model, owner0_frames) -> None:
@@ -211,6 +249,7 @@ def test_abilities_are_scored_and_named_after_the_card_that_owns_them(model) -> 
         None,
     )
     assert first["cell_distance"] is None and first["top_cells"] == [] and first["model_choice"] is not None
+    assert first["name"] == "精英骑士（技能）" and second["name"] == "弓箭手"
     assert second["kind"] == "play_card" and second["cell"] == [3, 10]
     assert player["unscored_source_actions"] == []
 
@@ -309,7 +348,8 @@ def test_swings_pick_the_largest_separate_moves_and_skip_noise() -> None:
 
 def test_player_review_summarises_agreement_and_unscored_source_actions() -> None:
     frames = [_frame(index) for index in range(12)]
-    frames[3] = _frame(3, act_probability=0.7, played=(_play(frames[3].tick + 1, STANDARD_DECK[0]),))
+    evolved = replace(_play(frames[3].tick + 1, STANDARD_DECK[0]), form="evolution")
+    frames[3] = _frame(3, act_probability=0.7, played=(evolved,))
     frames[6] = _frame(6, act_probability=0.2, played=(_play(frames[6].tick),))
     frames[9] = _frame(9, label_usable=False)
     context = PlayerContext(
@@ -327,6 +367,7 @@ def test_player_review_summarises_agreement_and_unscored_source_actions() -> Non
 
     player = build_player_review(0, frames, context=context)
 
+    assert player["actions"][0]["name"] == "觉醒骑士" and player["actions"][0]["model_choice"]["name"] == "骑士"
     agreement = player["summary"]["agreement"]
     assert agreement["act_when_player_acted"] == pytest.approx(0.5)
     assert agreement["wait_when_player_waited"] == pytest.approx(1.0)
