@@ -93,6 +93,16 @@ python -m native_runner.review explain runs/review/out/<回放 ID>.review.json
 
 每次请求完成后会打印实际用掉的 token 数。请求启用了服务端回退：如果安全分类器误拒，API 会自动换用推荐的模型重试，页面上显示的是实际作答的模型。
 
+还没有装好引擎时，可以先用一份示例复盘试一下页面和这条命令。示例里的对局和数字都是脚本编造的，页面上有标注：
+
+```sh
+python tools/make_demo_review.py
+```
+
+```sh
+python -m native_runner.review explain runs/demo-review/example.review.json --player 0
+```
+
 Claude 看到的只是复盘数据的摘要：双方出牌的时间、卡牌和位置，你的圣水，双方塔血，以及对战模型的评价。它看不到场上单位的交战过程，也不知道对手的手牌和圣水，所以讲解里关于“为什么”的部分是结合卡牌常识的推测，提示词要求它把推测明确说成推测。
 
 ## 重演保真度
