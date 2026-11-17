@@ -4,6 +4,8 @@ from dataclasses import replace
 import json
 import math
 from pathlib import Path
+import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +13,7 @@ import torch
 
 from native_runner.match_factory import STANDARD_DECK
 from native_runner.review import __main__ as review_cli
+from native_runner.review.page import render_page
 from native_runner.review.report import (
     PlayerContext,
     build_player_review,
@@ -37,7 +40,12 @@ from native_runner.review.sources import (
     match_context,
     select_replays,
 )
-from native_runner.tests.review_helpers import SyntheticPlay, synthetic_owner_sequence, synthetic_result
+from native_runner.tests.review_helpers import (
+    SyntheticPlay,
+    scripted_review,
+    synthetic_owner_sequence,
+    synthetic_result,
+)
 from native_runner.training.v4.cache import write_il_cache_index, write_il_cache_shard
 from native_runner.training.v4.expert import FIRST_POLICY_DECISION_TICK, POLICY_DECISION_TICKS
 from native_runner.training.v4.factory import build_production_model_v4
@@ -387,11 +395,57 @@ def test_cache_listing_and_cli_review_round_trip(model, monkeypatch, tmp_path: P
     assert review["players"][1]["summary"]["elixir"]["seconds_at_cap"] > 0
     assert all(len(player["timeline"]["tick"]) == 10 for player in review["players"])
     assert review["players"][0]["unscored_source_actions"] is None
+    page = output / "match-a.review.html"
+    assert _embedded_review(page.read_text(encoding="utf-8")) == review
+    page.unlink()
+    assert review_cli.main(["page", str(output / "match-a.review.json")]) == 0
+    assert _embedded_review(page.read_text(encoding="utf-8")) == review
 
     # Asking for a replay that never produced frames is reported, not ignored.
     assert review_cli.main(["analyze", str(index), "--output", str(output), "--tag", "match-b"]) == 1
     assert "deal is incompatible" in capsys.readouterr().err
     assert not (output / "match-b.review.json").exists()
+
+
+DATA_OPEN = '<script id="review-data" type="application/json">'
+
+
+def _embedded_review(html: str) -> dict:
+    assert html.count(DATA_OPEN) == 1
+    start = html.index(DATA_OPEN) + len(DATA_OPEN)
+    return json.loads(html[start : html.index("</script>", start)])
+
+
+def test_page_embeds_the_whole_review_and_cannot_be_closed_by_its_text() -> None:
+    review = scripted_review(partial=True)
+    review["replay_tag"] = "<tag&>"
+    review["fidelity"]["failure_reason"] = 'engine said </script><img src=x onerror="alert(1)"> and <!-- stopped'
+
+    html = render_page(review)
+
+    assert _embedded_review(html) == review
+    assert "<title>对局复盘 &lt;tag&amp;&gt;</title>" in html
+    assert "<img src=x" not in html and "<!-- stopped" not in html
+    assert "__REVIEW_" not in html
+    # Every part of the page has something to draw in the scripted match.
+    for player in review["players"]:
+        assert player["actions"] and player["missed_windows"] and player["swings"]
+    assert review["players"][0]["unscored_source_actions"]
+    assert not all(review["players"][0]["timeline"]["valid"])
+
+
+def test_page_script_is_valid_javascript(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    html = render_page(scripted_review())
+    start = html.rindex("<script>") + len("<script>")
+    script = tmp_path / "page.js"
+    script.write_text(html[start : html.index("</script>", start)], encoding="utf-8")
+
+    result = subprocess.run([node, "--check", str(script)], capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
 
 
 def _payload(replay_tag: str, *, events: bool = True, result: str = "victory") -> dict:

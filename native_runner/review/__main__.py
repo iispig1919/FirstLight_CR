@@ -3,9 +3,12 @@
     python -m native_runner.review select  DATASET_ROOT OUTPUT_ROOT [--tag TAG] [--deck-card KEY] [--limit N]
     python -m native_runner.review list    CACHE_INDEX
     python -m native_runner.review analyze CACHE_INDEX --output DIR [--tag TAG] [--dataset-root DIR]
+    python -m native_runner.review page    REVIEW_JSON [--output HTML]
 
 ``select`` and ``analyze`` never touch the battle engine.  Between them, build
 the cache from the selected dataset with ``native_runner.training.v4.cache_builder``.
+``analyze`` writes a review JSON and its report page per match; ``page`` redraws
+the page from an existing JSON.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from typing import Any, Mapping, Sequence
 
 from ..paths import REPOSITORY_ROOT
 from ..training.v4.policy_session import load_policy_v4
+from .page import render_page
 from .report import MatchContext, build_review, fidelity_report, render_summary
 from .scoring import score_sequence
 from .sources import iter_cached_replays, list_cached_replays, load_replay_payloads, match_context, select_replays
@@ -95,9 +99,19 @@ def _analyze(args: argparse.Namespace) -> int:
         )
         destination = args.output / f"{replay.replay_tag}.review.json"
         destination.write_text(json.dumps(review, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+        page = destination.with_suffix(".html")
+        page.write_text(render_page(review), encoding="utf-8")
         print(render_summary(review))
-        print(f"\n已写入 {destination}（用时 {time.perf_counter() - started:.1f} 秒）\n", flush=True)
+        print(f"\n已写入 {destination} 和 {page.name}（用时 {time.perf_counter() - started:.1f} 秒）\n", flush=True)
     return 1 if unavailable else 0
+
+
+def _page(args: argparse.Namespace) -> int:
+    review = json.loads(args.review_json.read_text(encoding="utf-8"))
+    destination = args.output or args.review_json.with_suffix(".html")
+    destination.write_text(render_page(review), encoding="utf-8")
+    print(f"已写入 {destination}")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -124,6 +138,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     analyze.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     analyze.add_argument("--device", default="cpu")
     analyze.set_defaults(run=_analyze)
+
+    page = commands.add_parser("page", help="redraw the report page from an existing review JSON")
+    page.add_argument("review_json", type=Path)
+    page.add_argument("--output", type=Path, default=None, help="default: next to the JSON, with .html")
+    page.set_defaults(run=_page)
 
     args = parser.parse_args(argv)
     return int(args.run(args))

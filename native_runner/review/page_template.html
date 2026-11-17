@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>对局复盘 __REVIEW_TITLE__</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --band: #f0efec;
+  --deemphasis: #c3c2b7;
+  --series-model: #2a78d6;
+  --series-player: #eb6834;
+  --series-opponent: #1baf7a;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --heat-0: #cde2fb;
+  --heat-1: #86b6ef;
+  --heat-2: #3987e5;
+  --heat-3: #1c5cab;
+  --heat-4: #0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --band: #2c2c2a;
+    --deemphasis: #52514e;
+    --series-model: #3987e5;
+    --series-player: #d95926;
+    --series-opponent: #199e70;
+    --heat-0: #0d366b;
+    --heat-1: #1c5cab;
+    --heat-2: #3987e5;
+    --heat-3: #86b6ef;
+    --heat-4: #cde2fb;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --band: #2c2c2a;
+  --deemphasis: #52514e;
+  --series-model: #3987e5;
+  --series-player: #d95926;
+  --series-opponent: #199e70;
+  --heat-0: #0d366b;
+  --heat-1: #1c5cab;
+  --heat-2: #3987e5;
+  --heat-3: #86b6ef;
+  --heat-4: #cde2fb;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 22px; line-height: 1.3; margin: 0 0 4px; }
+h2 { font-size: 16px; line-height: 1.4; margin: 0; }
+h3 { font-size: 14px; margin: 0 0 8px; }
+p { margin: 0; }
+.meta { color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.meta code { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.hint { color: var(--text-secondary); font-size: 13px; }
+.muted { color: var(--text-muted); }
+
+.banner {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin: 16px 0; padding: 12px 14px;
+  background: var(--surface-1); border: 1px solid var(--border); border-left: 4px solid var(--status-color);
+  border-radius: 8px;
+}
+.banner .icon {
+  flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--status-color);
+  color: #ffffff; font-weight: 700; font-size: 13px; line-height: 20px; text-align: center;
+}
+.banner[data-verdict="unverified"] .icon, .banner[data-verdict="partial"] .icon { color: #0b0b0b; }
+.banner[data-verdict="faithful"] { --status-color: var(--status-good); }
+.banner[data-verdict="unverified"] { --status-color: var(--status-warning); }
+.banner[data-verdict="partial"] { --status-color: var(--status-warning); }
+.banner[data-verdict="diverged"] { --status-color: var(--status-critical); }
+.banner strong { display: block; }
+.banner .banner-text { color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.tabs button, .chips button {
+  font: inherit; color: var(--text-secondary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.tabs button[aria-selected="true"], .chips button[aria-pressed="true"] {
+  color: var(--surface-1); background: var(--text-primary); border-color: var(--text-primary);
+}
+.tabs button:focus-visible, .chips button:focus-visible, tr:focus-visible, .timeline:focus-visible,
+.marker:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--series-model); outline-offset: 2px;
+}
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 24px; font-weight: 600; line-height: 1.25; }
+.tile .note { color: var(--text-muted); font-size: 12px; }
+
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 12px; }
+
+.timeline { position: relative; }
+.chart { margin: 0 0 12px; }
+.chart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-bottom: 2px; }
+.chart-title { font-weight: 600; font-size: 13px; }
+.chart-note { color: var(--text-muted); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--text-secondary); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.key-line { width: 14px; height: 2px; border-radius: 1px; background: var(--key); }
+.key-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--key); }
+.key-band { width: 12px; height: 10px; border-radius: 2px; background: var(--band); border: 1px solid var(--axis); }
+.key-cap { width: 14px; height: 4px; border-radius: 2px; background: var(--status-warning); }
+svg { display: block; overflow: visible; }
+svg text { font: 11px system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: var(--text-muted); }
+svg text.ink { fill: var(--text-secondary); }
+svg text.strong { fill: var(--text-primary); font-weight: 600; }
+svg text.band-label { paint-order: stroke; stroke: var(--band); stroke-width: 4px; stroke-linejoin: round; }
+.tick-num { font-variant-numeric: tabular-nums; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.baseline { stroke: var(--axis); stroke-width: 1; }
+.series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.area { stroke: none; fill-opacity: 0.10; }
+.s-model { stroke: var(--series-model); }
+.s-player { stroke: var(--series-player); }
+.s-opponent { stroke: var(--series-opponent); }
+.area.s-model { fill: var(--series-model); }
+.band { fill: var(--band); }
+.band-untrusted { fill: var(--band); }
+.focus-band { fill: none; stroke: var(--text-secondary); stroke-width: 1; }
+.cap-segment { stroke: var(--status-warning); stroke-width: 4; stroke-linecap: round; }
+.opponent-tick { stroke: var(--series-opponent); stroke-width: 2; stroke-linecap: round; }
+.key-tick { width: 2px; height: 10px; border-radius: 1px; background: var(--series-opponent); }
+.crosshair { stroke: var(--text-muted); stroke-width: 1; pointer-events: none; }
+.marker { cursor: pointer; outline-offset: 4px; }
+.marker:focus:not(:focus-visible) { outline: none; }
+.marker .hit { fill: transparent; }
+.marker .dot { stroke: var(--surface-1); stroke-width: 2; fill: var(--deemphasis); }
+.marker.disputed .dot { fill: var(--series-player); }
+.marker.selected .halo { stroke: var(--text-primary); stroke-width: 2; fill: none; }
+.marker .halo { fill: none; stroke: none; }
+
+.tooltip {
+  position: absolute; z-index: 5; pointer-events: none; min-width: 150px; max-width: 240px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14); font-size: 12px;
+}
+.tooltip .when { font-weight: 600; margin-bottom: 4px; }
+.tooltip .row { display: flex; align-items: center; gap: 6px; }
+.tooltip .row b { font-variant-numeric: tabular-nums; min-width: 44px; }
+.tooltip .row span.name { color: var(--text-secondary); }
+.tooltip .played { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--grid); color: var(--text-secondary); }
+
+details.table-view { margin-top: 4px; }
+summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.table-scroll.tall { max-height: 320px; overflow-y: auto; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface-1); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.when { font-variant-numeric: tabular-nums; }
+table.compact { width: auto; min-width: min(100%, 520px); }
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover { background: var(--band); }
+tbody tr[aria-current="true"] { background: var(--band); box-shadow: inset 3px 0 0 var(--text-primary); }
+.dot-inline { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--deemphasis); }
+.dot-inline.disputed { background: var(--series-player); }
+.empty { color: var(--text-muted); padding: 8px 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.chips button { padding: 4px 12px; font-size: 13px; }
+.actions-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .actions-layout { grid-template-columns: minmax(0, 1fr); } }
+.detail { border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.detail .title { font-weight: 600; font-size: 15px; }
+.detail .where { color: var(--text-secondary); font-size: 13px; margin-bottom: 10px; }
+.facts { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0 0 12px; font-size: 13px; }
+.facts dt { color: var(--text-secondary); }
+.facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.arena-wrap { display: flex; justify-content: center; margin: 4px 0 8px; }
+.arena-ground { fill: var(--page); stroke: var(--axis); stroke-width: 1; }
+.arena-river { fill: var(--band); }
+.arena-bridge { fill: var(--axis); }
+.arena-tower { fill: none; stroke: var(--text-muted); stroke-width: 1; }
+.heat-0 { fill: var(--heat-0); } .heat-1 { fill: var(--heat-1); } .heat-2 { fill: var(--heat-2); }
+.heat-3 { fill: var(--heat-3); } .heat-4 { fill: var(--heat-4); }
+.heat-cell { cursor: default; }
+.pin-player { fill: var(--series-player); stroke: var(--surface-1); stroke-width: 2; }
+.pin-model { fill: var(--series-model); stroke: var(--surface-1); stroke-width: 2; }
+svg text.pin-label { fill: var(--text-primary); font-weight: 600; paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; }
+.heat-scale { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-secondary); font-size: 12px; margin-bottom: 10px; }
+.heat-scale i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.pins-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; color: var(--text-secondary); font-size: 12px; margin-bottom: 12px; }
+.pins-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.options { display: grid; grid-template-columns: auto minmax(40px, 1fr) auto; gap: 6px 8px; align-items: center; font-size: 13px; }
+.options .name small { color: var(--text-muted); margin-left: 4px; }
+.options .track { height: 12px; }
+.options .bar { height: 12px; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--deemphasis); }
+.options .bar.player { background: var(--series-player); }
+.options .value { font-variant-numeric: tabular-nums; text-align: right; }
+.cells-list { color: var(--text-secondary); font-size: 12px; margin: 0 0 12px; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 24px; }
+footer p + p { margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>对局复盘</h1>
+    <div class="meta" id="meta"></div>
+  </header>
+  <div class="banner" id="banner" role="status"></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="选择玩家"></div>
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>时间线</h2>
+      <p class="hint">悬停查看某一刻的全部数值，点击圆点查看那次出牌。</p>
+    </div>
+    <div class="timeline" id="timeline" tabindex="0" aria-label="时间线图表，左右方向键移动时间"></div>
+    <details class="table-view">
+      <summary>查看数据表（每秒一行）</summary>
+      <div class="table-scroll tall"><table id="timeline-table"></table></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>出牌评价</h2>
+      <p class="hint">概率是模型自己的分布：概率低表示它很少这么打，不代表一定打错。</p>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="筛选出牌"></div>
+    <div class="actions-layout">
+      <div class="table-scroll"><table id="actions-table"></table></div>
+      <aside class="detail" id="detail" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>模型想出牌而你在等</h2>
+      <p class="hint">模型的出牌意愿持续 1 秒以上超过 50% 的时段。点击一行在时间线上标出。</p>
+    </div>
+    <div class="table-scroll"><table id="missed-table" class="compact"></table></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>局势转折</h2>
+      <p class="hint">5 秒窗口内局势值变化最大的几段。点击一行在时间线上标出。</p>
+    </div>
+    <div class="table-scroll"><table id="swings-table" class="compact"></table></div>
+  </section>
+
+  <section class="card" id="unscored-card" hidden>
+    <div class="card-head">
+      <h2>未能评分的出牌</h2>
+      <p class="hint">真实对局里有、但重演无法对齐的动作，上面的评价不包含它们。</p>
+    </div>
+    <div class="table-scroll"><table id="unscored-table" class="compact"></table></div>
+  </section>
+
+  <footer>
+    <p>坐标 (x, y) 是被复盘玩家自己的视角：x 0–17 从左到右，y 0–31 从己方国王塔到对方国王塔。</p>
+    <p>局势值是模型价值头的输出（胜 +1、负 −1 的期望折扣回报加塔血塑形），不是校准过的胜率，只在同一个模型内比较。</p>
+    <p>出牌意愿来自训练时对“出牌”加权过的门控，只适合当相对分数看。</p>
+  </footer>
+</main>
+
+<script id="review-data" type="application/json">__REVIEW_JSON__</script>
+<script>
+(function () {
+  "use strict";
+
+  var review = JSON.parse(document.getElementById("review-data").textContent);
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var TPS = review.conventions.tick_rate_hz;
+  var PLACEMENT_MINIMUM_DISTANCE = 3;
+  var ACT_THRESHOLD = 0.5;
+  var state = { player: 0, action: null, filter: "all", frame: null, focus: null };
+
+  var VERDICT = {
+    faithful: ["✓", "重演可信", "重演走完全程，胜负与皇冠数和真实对局一致。"],
+    unverified: ["!", "重演未核对", "重演走完全程，但模拟没有在原对局结束时分出胜负，结果无法比对。"],
+    partial: ["!", "重演部分可信", "重演提前中止，只有中止前的帧可用。"],
+    diverged: ["×", "重演已偏离", "模拟结果与真实对局不同，以下内容仅供参考。"]
+  };
+  var RESULT = { win: "胜", loss: "负", draw: "平" };
+
+  function el(tag, attrs, text) {
+    var node = document.createElement(tag);
+    for (var key in attrs || {}) { node.setAttribute(key, attrs[key]); }
+    if (text !== undefined && text !== null) { node.textContent = text; }
+    return node;
+  }
+  function svg(tag, attrs, text) {
+    var node = document.createElementNS(SVG_NS, tag);
+    for (var key in attrs || {}) { node.setAttribute(key, attrs[key]); }
+    if (text !== undefined && text !== null) { node.textContent = text; }
+    return node;
+  }
+  function clock(tick) {
+    var seconds = Math.floor(tick / TPS);
+    return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+  }
+  function num(value, digits) {
+    if (value === null || value === undefined) { return "—"; }
+    var text = value.toFixed(digits === undefined ? 2 : digits);
+    return (parseFloat(text) === 0 ? text.replace("-", "") : text).replace("-", "−");
+  }
+  function signed(value, digits) {
+    if (value === null || value === undefined) { return "—"; }
+    var text = Math.abs(value).toFixed(digits === undefined ? 2 : digits);
+    return (parseFloat(text) === 0 ? "" : value > 0 ? "+" : "−") + text;
+  }
+  function pct(value) {
+    return value === null || value === undefined ? "—" : Math.round(value * 100) + "%";
+  }
+  function cellText(cell) { return cell ? "(" + cell[0] + ", " + cell[1] + ")" : "—"; }
+  function player() { return review.players[state.player]; }
+  function opponent() { return review.players.length === 2 ? review.players[1 - state.player] : null; }
+  function disputed(action) { return !!action.model_choice && !action.model_choice.same_card; }
+
+  var FILTERS = [
+    ["all", "全部", function () { return true; }],
+    ["card", "选牌分歧", disputed],
+    ["cell", "落点分歧", function (a) { return a.cell_distance !== null && a.cell_distance >= PLACEMENT_MINIMUM_DISTANCE; }],
+    ["timing", "时机分歧", function (a) { return a.act_probability !== null && a.act_probability <= ACT_THRESHOLD; }]
+  ];
+
+  /* ---------- header ---------- */
+
+  function renderHeader() {
+    var meta = document.getElementById("meta");
+    meta.textContent = "";
+    var tag = el("span", {}, "回放 ");
+    tag.appendChild(el("code", {}, review.replay_tag));
+    meta.appendChild(tag);
+    meta.appendChild(el("span", {}, "模型 " + (review.model.checkpoint_file || "?")));
+    if (review.match.game_mode) { meta.appendChild(el("span", {}, "模式 " + review.match.game_mode)); }
+    if (review.match.duration_seconds) {
+      meta.appendChild(el("span", {}, "时长 " + clock(review.match.duration_seconds * TPS)));
+    }
+
+    var fidelity = review.fidelity;
+    var verdict = VERDICT[fidelity.verdict] || VERDICT.partial;
+    var banner = document.getElementById("banner");
+    banner.textContent = "";
+    banner.setAttribute("data-verdict", fidelity.verdict);
+    banner.appendChild(el("span", { class: "icon", "aria-hidden": "true" }, verdict[0]));
+    var body = el("div");
+    body.appendChild(el("strong", {}, verdict[1]));
+    var detail = verdict[2];
+    if (fidelity.expert_action_count !== null && fidelity.expert_action_count !== undefined) {
+      detail += " 成功执行的动作 " + fidelity.executed_expert_action_count + "/" + fidelity.expert_action_count + "。";
+    }
+    body.appendChild(el("div", { class: "banner-text" }, detail));
+    if (fidelity.failure_reason) { body.appendChild(el("div", { class: "banner-text" }, "原因：" + fidelity.failure_reason)); }
+    banner.appendChild(body);
+  }
+
+  function renderTabs() {
+    var tabs = document.getElementById("tabs");
+    tabs.textContent = "";
+    review.players.forEach(function (item, index) {
+      var parts = ["玩家 " + item.owner];
+      if (item.side) { parts.push(item.side); }
+      if (RESULT[item.result]) { parts.push(RESULT[item.result]); }
+      if (item.crowns !== null && item.crowns !== undefined) { parts.push(item.crowns + " 冠"); }
+      var button = el("button", { role: "tab", type: "button", "aria-selected": String(index === state.player) },
+        parts.join(" · "));
+      button.addEventListener("click", function () {
+        state.player = index; state.action = null; state.filter = "all"; state.frame = null; state.focus = null;
+        renderTabs(); renderPlayer();
+      });
+      tabs.appendChild(button);
+    });
+  }
+
+  function renderTiles() {
+    var summary = player().summary;
+    var agreement = summary.agreement;
+    var tiles = [
+      ["已评分出牌", String(summary.actions), "可信决策帧 " + summary.trusted_frames + "/" + summary.frames],
+      ["选牌一致", pct(agreement.same_card), "模型首选与你相同的比例"],
+      ["出牌时机一致", pct(agreement.act_when_player_acted), "你出牌时模型也想出牌"],
+      ["落点中位偏差", agreement.median_cell_distance === null ? "—" : num(agreement.median_cell_distance, 1) + " 格",
+        "同一张牌，你与模型的落点距离"],
+      ["估计漏水", num(summary.elixir.leaked_estimate, 1),
+        summary.elixir.leaked_reported_by_source === null || summary.elixir.leaked_reported_by_source === undefined
+          ? "满圣水 " + num(summary.elixir.seconds_at_cap, 1) + " 秒"
+          : "来源统计 " + num(summary.elixir.leaked_reported_by_source, 1)],
+      ["平均圣水", num(summary.elixir.mean, 1), "终局局势值 " + num(summary.value.end)]
+    ];
+    var host = document.getElementById("tiles");
+    host.textContent = "";
+    tiles.forEach(function (tile) {
+      var node = el("div", { class: "tile" });
+      node.appendChild(el("div", { class: "label" }, tile[0]));
+      node.appendChild(el("div", { class: "value" }, tile[1]));
+      node.appendChild(el("div", { class: "note" }, tile[2]));
+      host.appendChild(node);
+    });
+  }
+
+  /* ---------- timeline ---------- */
+
+  function niceStep(span, target) {
+    var raw = span / target;
+    var power = Math.pow(10, Math.floor(Math.log10(raw)));
+    var scaled = raw / power;
+    return (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10) * power;
+  }
+  function niceDomain(values, includeZero) {
+    var low = Infinity, high = -Infinity;
+    values.forEach(function (value) {
+      if (value !== null && value !== undefined) { low = Math.min(low, value); high = Math.max(high, value); }
+    });
+    if (!isFinite(low)) { low = 0; high = 1; }
+    if (includeZero) { low = Math.min(low, 0); high = Math.max(high, 0); }
+    if (high - low < 1e-9) { high = low + 1; }
+    var step = niceStep(high - low, 4);
+    var start = Math.floor(low / step) * step;
+    var stop = Math.ceil(high / step) * step;
+    var ticks = [];
+    for (var value = start; value <= stop + step / 2; value += step) { ticks.push(Math.round(value / step) * step); }
+    return { domain: [start, stop], ticks: ticks, step: step };
+  }
+  function tickLabel(value, step) {
+    var digits = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+    return value.toFixed(digits).replace("-", "−");
+  }
+  function sumTowers(rows) {
+    return rows.map(function (row) { return row ? row[0] + row[1] + row[2] : null; });
+  }
+
+  var timelineContext = null;
+
+  function buildTimeline() {
+    var host = document.getElementById("timeline");
+    var item = player();
+    var timeline = item.timeline;
+    var count = timeline.tick.length;
+    host.textContent = "";
+    if (!count) { host.appendChild(el("p", { class: "empty" }, "没有可用的决策帧。")); timelineContext = null; return; }
+
+    var width = Math.max(300, Math.floor(host.clientWidth));
+    var pad = { left: 44, right: 46, top: 10, bottom: 22 };
+    var endSeconds = timeline.tick[count - 1] / TPS;
+    var xOfTick = function (tick) { return pad.left + (tick / TPS) / endSeconds * (width - pad.left - pad.right); };
+    var xStep = [15, 30, 60, 120, 300].find(function (step) { return endSeconds / step <= (width < 520 ? 5 : 9); }) || 600;
+    var firstInvalid = timeline.valid.indexOf(false);
+    var ownTotal = sumTowers(timeline.own_towers);
+    var enemyTotal = sumTowers(timeline.enemy_towers);
+    var valueScale = niceDomain(timeline.value.filter(function (_v, i) { return timeline.valid[i]; }), true);
+    var towerScale = niceDomain(ownTotal.concat(enemyTotal), true);
+
+    timelineContext = {
+      host: host, width: width, pad: pad, count: count, timeline: timeline, xOfTick: xOfTick, xStep: xStep,
+      endSeconds: endSeconds, firstInvalid: firstInvalid, ownTotal: ownTotal, enemyTotal: enemyTotal,
+      crosshairs: [], focusBands: [], markers: []
+    };
+
+    var specs = [
+      {
+        title: "局势值", note: "正值表示这名玩家占优", height: 210, scale: valueScale, zero: true,
+        series: [{ values: timeline.value, cls: "s-model", area: true }],
+        bands: item.swings.map(function (swing) {
+          return { start: swing.start_tick, end: swing.end_tick, label: signed(swing.value_change), weight: Math.abs(swing.value_change) };
+        }),
+        markers: true, opponentTicks: !!opponent(),
+        legend: [["key-dot", "var(--series-player)", "模型不认同的选牌"], ["key-dot", "var(--deemphasis)", "其余出牌"],
+          ["key-band", null, "局势转折"]].concat(opponent() ? [["key-tick", null, "对方出牌"]] : [])
+      },
+      {
+        title: "模型出牌意愿", note: "超过 50% 时模型会出牌", height: 120,
+        scale: { domain: [0, 1], ticks: [0, 0.5, 1], labels: ["0%", "50%", "100%"] },
+        series: [{ values: timeline.act_probability, cls: "s-model", area: true }],
+        bands: item.missed_windows.map(function (window) { return { start: window.start_tick, end: window.end_tick }; }),
+        legend: [["key-band", null, "模型想出牌而你在等"]]
+      },
+      {
+        title: "圣水", height: 120, scale: { domain: [0, 10], ticks: [0, 5, 10] },
+        series: [{ values: timeline.elixir, cls: "s-player" }], cap: 10,
+        legend: [["key-cap", null, "⚠ 满圣水（漏水）"]]
+      },
+      {
+        title: "塔血合计", height: 140, scale: towerScale,
+        series: [{ values: ownTotal, cls: "s-player", name: "己方" }, { values: enemyTotal, cls: "s-opponent", name: "对方" }],
+        legend: [["key-line", "var(--series-player)", "己方"], ["key-line", "var(--series-opponent)", "对方"]]
+      }
+    ];
+    specs.forEach(function (spec) { host.appendChild(drawChart(spec, timelineContext)); });
+
+    var tooltip = el("div", { class: "tooltip", id: "tooltip", hidden: "" });
+    host.appendChild(tooltip);
+    timelineContext.tooltip = tooltip;
+    updateCrosshair();
+    updateFocus();
+    updateMarkers();
+  }
+
+  function segments(values, valid) {
+    var result = [], current = [];
+    for (var index = 0; index < values.length; index++) {
+      if (values[index] !== null && values[index] !== undefined && valid[index]) { current.push(index); }
+      else if (current.length) { result.push(current); current = []; }
+    }
+    if (current.length) { result.push(current); }
+    return result;
+  }
+
+  function drawChart(spec, context) {
+    var timeline = context.timeline;
+    var figure = el("figure", { class: "chart" });
+    var caption = el("figcaption");
+    caption.appendChild(el("span", { class: "chart-title" }, spec.title));
+    if (spec.note) { caption.appendChild(el("span", { class: "chart-note" }, spec.note)); }
+    if (spec.legend) {
+      var legend = el("span", { class: "legend" });
+      spec.legend.forEach(function (entry) {
+        var row = el("span");
+        var key = el("i", { class: entry[0] });
+        if (entry[1]) { key.style.setProperty("--key", entry[1]); }
+        row.appendChild(key);
+        row.appendChild(document.createTextNode(entry[2]));
+        legend.appendChild(row);
+      });
+      caption.appendChild(legend);
+    }
+    figure.appendChild(caption);
+
+    var height = spec.height, pad = context.pad;
+    var top = pad.top, bottom = height - pad.bottom;
+    var domain = spec.scale.domain;
+    var yOf = function (value) { return bottom - (value - domain[0]) / (domain[1] - domain[0]) * (bottom - top); };
+    var left = pad.left, right = context.width - pad.right;
+    var root = svg("svg", { width: context.width, height: height, role: "img", "aria-label": spec.title });
+
+    (spec.bands || []).forEach(function (band) {
+      var x0 = context.xOfTick(band.start), x1 = context.xOfTick(band.end);
+      root.appendChild(svg("rect", { class: "band", x: x0, y: top, width: Math.max(2, x1 - x0), height: bottom - top, rx: 2 }));
+    });
+    if (context.firstInvalid >= 0) {
+      var from = context.xOfTick(timeline.tick[context.firstInvalid]);
+      root.appendChild(svg("rect", { class: "band-untrusted", x: from, y: top, width: Math.max(2, right - from), height: bottom - top }));
+      root.appendChild(svg("text", { x: Math.min(from + 4, right - 40), y: top + 12, class: "ink" }, "不可信"));
+    }
+
+    spec.scale.ticks.forEach(function (tick, index) {
+      var y = yOf(tick);
+      var isZero = spec.zero && Math.abs(tick) < 1e-9;
+      root.appendChild(svg("line", { class: isZero ? "baseline" : "gridline", x1: left, x2: right, y1: y, y2: y }));
+      var label = spec.scale.labels ? spec.scale.labels[index] : tickLabel(tick, spec.scale.step || 1);
+      root.appendChild(svg("text", { class: "tick-num", x: left - 6, y: y + 4, "text-anchor": "end" }, label));
+    });
+    for (var seconds = 0; seconds <= context.endSeconds + 1e-6; seconds += context.xStep) {
+      var x = context.xOfTick(seconds * TPS);
+      root.appendChild(svg("text", { class: "tick-num", x: x, y: height - 6, "text-anchor": "middle" }, clock(seconds * TPS)));
+    }
+
+    spec.series.forEach(function (series) {
+      segments(series.values, timeline.valid).forEach(function (indices) {
+        var points = indices.map(function (index) {
+          return context.xOfTick(timeline.tick[index]).toFixed(1) + "," + yOf(series.values[index]).toFixed(1);
+        });
+        if (series.area) {
+          var base = yOf(Math.max(domain[0], Math.min(domain[1], 0))).toFixed(1);
+          var firstX = context.xOfTick(timeline.tick[indices[0]]).toFixed(1);
+          var lastX = context.xOfTick(timeline.tick[indices[indices.length - 1]]).toFixed(1);
+          root.appendChild(svg("path", {
+            class: "area " + series.cls,
+            d: "M" + points.join("L") + "L" + lastX + "," + base + "L" + firstX + "," + base + "Z"
+          }));
+        }
+        root.appendChild(svg("path", { class: "series " + series.cls, d: "M" + points.join("L") }));
+      });
+    });
+
+    if (spec.opponentTicks) {
+      opponent().actions.forEach(function (action) {
+        var x = context.xOfTick(action.tick);
+        if (x < left || x > right) { return; }
+        root.appendChild(svg("line", { class: "opponent-tick", x1: x, x2: x, y1: bottom - 7, y2: bottom - 1 }));
+      });
+    }
+
+    if (spec.cap !== undefined) {
+      var capY = yOf(spec.cap);
+      segments(spec.series[0].values.map(function (value) { return value !== null && value >= spec.cap - 0.01 ? value : null; }),
+        timeline.valid).forEach(function (indices) {
+        root.appendChild(svg("line", {
+          class: "cap-segment", y1: capY, y2: capY,
+          x1: context.xOfTick(timeline.tick[indices[0]]),
+          x2: Math.max(context.xOfTick(timeline.tick[indices[indices.length - 1]]), context.xOfTick(timeline.tick[indices[0]]) + 1)
+        }));
+      });
+    }
+
+    // Direct end labels for a two-series chart, only where they do not collide.
+    var named = spec.series.filter(function (series) { return series.name; });
+    if (named.length === 2) {
+      var ends = named.map(function (series) {
+        for (var index = series.values.length - 1; index >= 0; index--) {
+          if (series.values[index] !== null && timeline.valid[index]) { return yOf(series.values[index]); }
+        }
+        return null;
+      });
+      if (ends[0] !== null && ends[1] !== null && Math.abs(ends[0] - ends[1]) >= 14) {
+        named.forEach(function (series, index) {
+          root.appendChild(svg("text", { class: "ink", x: right + 6, y: ends[index] + 4 }, series.name));
+        });
+      }
+    }
+
+    var focusBand = svg("rect", { class: "focus-band", y: top, height: bottom - top, rx: 2, visibility: "hidden" });
+    root.appendChild(focusBand);
+    context.focusBands.push(focusBand);
+    var crosshair = svg("line", { class: "crosshair", y1: top, y2: bottom, visibility: "hidden" });
+    root.appendChild(crosshair);
+    context.crosshairs.push(crosshair);
+
+    // Label the largest moves first and skip any label that would touch one already placed.
+    var placed = [];
+    (spec.bands || []).filter(function (band) { return band.label; })
+      .sort(function (a, b) { return b.weight - a.weight; })
+      .forEach(function (band) {
+        var x = (context.xOfTick(band.start) + context.xOfTick(band.end)) / 2;
+        if (placed.some(function (other) { return Math.abs(other - x) < 44; })) { return; }
+        placed.push(x);
+        root.appendChild(svg("text", { class: "ink tick-num band-label", x: x, y: top + 12, "text-anchor": "middle" }, band.label));
+      });
+
+    if (spec.markers) {
+      player().actions.forEach(function (action) {
+        var value = timeline.value[action.frame];
+        if (value === null || value === undefined) { return; }
+        var group = svg("g", {
+          class: "marker" + (disputed(action) ? " disputed" : ""), tabindex: "0", role: "button",
+          "aria-label": action.time + " " + action.card.name + (disputed(action) ? "，模型不认同选牌" : ""),
+          transform: "translate(" + context.xOfTick(action.tick).toFixed(1) + "," + yOf(value).toFixed(1) + ")"
+        });
+        group.appendChild(svg("circle", { class: "hit", r: 12 }));
+        group.appendChild(svg("circle", { class: "halo", r: 8 }));
+        group.appendChild(svg("circle", { class: "dot", r: 4.5 }));
+        group.addEventListener("click", function () { selectAction(action.index, true); });
+        group.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectAction(action.index, true); }
+        });
+        root.appendChild(group);
+        context.markers.push([action.index, group]);
+      });
+    }
+
+    root.addEventListener("pointermove", function (event) {
+      var box = root.getBoundingClientRect();
+      var seconds = (event.clientX - box.left - left) / (right - left) * context.endSeconds;
+      state.frame = nearestFrame(seconds * TPS);
+      updateCrosshair(event);
+    });
+    root.addEventListener("pointerleave", function () { state.frame = null; updateCrosshair(); });
+    figure.appendChild(root);
+    return figure;
+  }
+
+  function nearestFrame(tick) {
+    var ticks = timelineContext.timeline.tick;
+    var low = 0, high = ticks.length - 1;
+    while (high - low > 1) {
+      var middle = (low + high) >> 1;
+      if (ticks[middle] < tick) { low = middle; } else { high = middle; }
+    }
+    return Math.abs(ticks[low] - tick) <= Math.abs(ticks[high] - tick) ? low : high;
+  }
+
+  function tooltipRow(value, name, color) {
+    var row = el("div", { class: "row" });
+    var key = el("i", { class: "key-line" });
+    key.style.setProperty("--key", color);
+    row.appendChild(key);
+    row.appendChild(el("b", {}, value));
+    row.appendChild(el("span", { class: "name" }, name));
+    return row;
+  }
+
+  function updateCrosshair(event) {
+    var context = timelineContext;
+    if (!context) { return; }
+    var tooltip = context.tooltip;
+    if (state.frame === null) {
+      context.crosshairs.forEach(function (line) { line.setAttribute("visibility", "hidden"); });
+      tooltip.hidden = true;
+      return;
+    }
+    var timeline = context.timeline, frame = state.frame;
+    var x = context.xOfTick(timeline.tick[frame]);
+    context.crosshairs.forEach(function (line) {
+      line.setAttribute("x1", x); line.setAttribute("x2", x); line.setAttribute("visibility", "visible");
+    });
+    tooltip.textContent = "";
+    tooltip.appendChild(el("div", { class: "when" }, clock(timeline.tick[frame]) + (timeline.valid[frame] ? "" : "（不可信）")));
+    tooltip.appendChild(tooltipRow(num(timeline.value[frame]), "局势值", "var(--series-model)"));
+    tooltip.appendChild(tooltipRow(pct(timeline.act_probability[frame]), "出牌意愿", "var(--series-model)"));
+    tooltip.appendChild(tooltipRow(num(timeline.elixir[frame], 1), "圣水", "var(--series-player)"));
+    tooltip.appendChild(tooltipRow(num(context.ownTotal[frame], 0), "己方塔血", "var(--series-player)"));
+    tooltip.appendChild(tooltipRow(num(context.enemyTotal[frame], 0), "对方塔血", "var(--series-opponent)"));
+    var near = player().actions.filter(function (action) { return Math.abs(action.tick - timeline.tick[frame]) <= TPS / 2; });
+    if (near.length) {
+      tooltip.appendChild(el("div", { class: "played" }, "出牌：" + near.map(function (action) { return action.card.name; }).join("、")));
+    }
+    var theirs = opponent() ? opponent().actions.filter(function (action) {
+      return Math.abs(action.tick - timeline.tick[frame]) <= TPS / 2;
+    }) : [];
+    if (theirs.length) {
+      tooltip.appendChild(el("div", { class: "played" }, "对方出牌：" + theirs.map(function (action) { return action.card.name; }).join("、")));
+    }
+    tooltip.hidden = false;
+    var hostBox = context.host.getBoundingClientRect();
+    var topOffset = event ? event.clientY - hostBox.top + 14 : 8;
+    var leftOffset = x + 12;
+    if (leftOffset + tooltip.offsetWidth > context.width) { leftOffset = x - 12 - tooltip.offsetWidth; }
+    tooltip.style.left = Math.max(0, leftOffset) + "px";
+    tooltip.style.top = Math.min(topOffset, context.host.offsetHeight - tooltip.offsetHeight) + "px";
+  }
+
+  function updateFocus() {
+    var context = timelineContext;
+    if (!context) { return; }
+    context.focusBands.forEach(function (band) {
+      if (!state.focus) { band.setAttribute("visibility", "hidden"); return; }
+      var x0 = context.xOfTick(state.focus[0]), x1 = context.xOfTick(state.focus[1]);
+      band.setAttribute("x", x0); band.setAttribute("width", Math.max(2, x1 - x0)); band.setAttribute("visibility", "visible");
+    });
+  }
+
+  function updateMarkers() {
+    if (!timelineContext) { return; }
+    timelineContext.markers.forEach(function (entry) {
+      entry[1].classList.toggle("selected", entry[0] === state.action);
+    });
+  }
+
+  function renderTimelineTable() {
+    var timeline = player().timeline;
+    var table = document.getElementById("timeline-table");
+    table.textContent = "";
+    var head = el("tr");
+    [["时间", ""], ["局势值", "num"], ["出牌意愿", "num"], ["圣水", "num"], ["己方塔血", "num"], ["对方塔血", "num"]].forEach(function (column) {
+      head.appendChild(el("th", column[1] ? { class: column[1], scope: "col" } : { scope: "col" }, column[0]));
+    });
+    var thead = el("thead"); thead.appendChild(head); table.appendChild(thead);
+    var body = el("tbody");
+    var own = sumTowers(timeline.own_towers), enemy = sumTowers(timeline.enemy_towers);
+    var stride = Math.max(1, Math.round(TPS / review.conventions.decision_interval_ticks));
+    for (var index = 0; index < timeline.tick.length; index += stride) {
+      var row = el("tr");
+      row.appendChild(el("td", {}, clock(timeline.tick[index]) + (timeline.valid[index] ? "" : "（不可信）")));
+      [num(timeline.value[index]), pct(timeline.act_probability[index]), num(timeline.elixir[index], 1),
+        num(own[index], 0), num(enemy[index], 0)].forEach(function (text) { row.appendChild(el("td", { class: "num" }, text)); });
+      body.appendChild(row);
+    }
+    table.appendChild(body);
+  }
+
+  /* ---------- actions ---------- */
+
+  function tableHead(table, columns) {
+    var head = el("tr");
+    columns.forEach(function (column) {
+      head.appendChild(el("th", column[1] ? { class: column[1], scope: "col" } : { scope: "col" }, column[0]));
+    });
+    var thead = el("thead");
+    thead.appendChild(head);
+    table.appendChild(thead);
+  }
+  function emptyRow(body, columns, text) {
+    var row = el("tr");
+    row.appendChild(el("td", { colspan: String(columns), class: "empty" }, text));
+    body.appendChild(row);
+  }
+  function makeClickable(row, handler) {
+    row.classList.add("clickable");
+    row.setAttribute("tabindex", "0");
+    row.addEventListener("click", handler);
+    row.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handler(); }
+    });
+  }
+
+  function renderChips() {
+    var host = document.getElementById("chips");
+    host.textContent = "";
+    FILTERS.forEach(function (filter) {
+      var count = player().actions.filter(filter[2]).length;
+      var button = el("button", { type: "button", "aria-pressed": String(state.filter === filter[0]) },
+        filter[1] + " " + count);
+      button.addEventListener("click", function () { state.filter = filter[0]; renderChips(); renderActions(); });
+      host.appendChild(button);
+    });
+  }
+
+  function renderActions() {
+    var table = document.getElementById("actions-table");
+    table.textContent = "";
+    var columns = [["时间", ""], ["卡牌", ""], ["落点", ""], ["圣水", "num"], ["时机", "num"], ["选牌", "num"],
+      ["模型首选", ""], ["落点排名", "num"], ["5 秒后局势", "num"]];
+    tableHead(table, columns);
+    var body = el("tbody");
+    var predicate = FILTERS.filter(function (filter) { return filter[0] === state.filter; })[0][2];
+    var rows = player().actions.filter(predicate);
+    rows.forEach(function (action) {
+      var row = el("tr", { "data-index": String(action.index) });
+      if (action.index === state.action) { row.setAttribute("aria-current", "true"); }
+      row.appendChild(el("td", { class: "when" }, action.time));
+      var card = el("td");
+      card.appendChild(el("span", { class: "dot-inline" + (disputed(action) ? " disputed" : ""), "aria-hidden": "true" }));
+      card.appendChild(document.createTextNode(action.card.name + (action.kind === "activate_ability" ? "（技能）" : "")));
+      row.appendChild(card);
+      row.appendChild(el("td", {}, action.zone ? action.zone + " " + cellText(action.cell) : "—"));
+      row.appendChild(el("td", { class: "num" }, num(action.elixir_before, 1)));
+      row.appendChild(el("td", { class: "num" }, pct(action.act_probability)));
+      row.appendChild(el("td", { class: "num" }, pct(action.card_probability)));
+      var choice = action.model_choice;
+      row.appendChild(el("td", {}, !choice ? "—" : choice.same_card ? "相同" : choice.card.name + " " + pct(choice.card_probability)));
+      row.appendChild(el("td", { class: "num" }, action.cell_rank ? action.cell_rank + "/" + action.legal_cell_count : "—"));
+      row.appendChild(el("td", { class: "num" }, signed(action.value_change)));
+      makeClickable(row, function () { selectAction(action.index, false); });
+      body.appendChild(row);
+    });
+    if (!rows.length) { emptyRow(body, columns.length, "没有符合条件的出牌。"); }
+    table.appendChild(body);
+  }
+
+  function selectAction(index, scrollToRow) {
+    state.action = index;
+    var action = player().actions[index];
+    state.focus = null;
+    updateFocus();
+    updateMarkers();
+    var predicate = FILTERS.filter(function (filter) { return filter[0] === state.filter; })[0][2];
+    if (!predicate(action)) { state.filter = "all"; renderChips(); }
+    renderActions();
+    renderDetail();
+    if (scrollToRow) {
+      var row = document.querySelector('#actions-table tr[data-index="' + index + '"]');
+      if (row) { row.scrollIntoView({ block: "nearest" }); }
+      document.getElementById("detail").scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  /* ---------- detail ---------- */
+
+  // Geometry from native_runner/arena.py, in the reviewed player's own view.
+  var ARENA = {
+    width: 18, height: 32, cell: 11, river: [15, 17],
+    towers: [[9, 3, 4, "王"], [3.5, 6.5, 3, ""], [14.5, 6.5, 3, ""]]
+  };
+
+  function drawArena(action) {
+    var cell = ARENA.cell, width = ARENA.width * cell, height = ARENA.height * cell;
+    var px = function (x) { return x * cell; };
+    var py = function (y) { return (ARENA.height - y) * cell; };
+    var root = svg("svg", { width: width + 2, height: height + 2, viewBox: "-1 -1 " + (width + 2) + " " + (height + 2),
+      role: "img", "aria-label": "场地：你的落点与模型的落点分布" });
+    root.appendChild(svg("rect", { class: "arena-ground", x: 0, y: 0, width: width, height: height, rx: 3 }));
+    root.appendChild(svg("rect", { class: "arena-river", x: 0, y: py(ARENA.river[1]), width: width, height: (ARENA.river[1] - ARENA.river[0]) * cell }));
+    // Bridge columns sit half a tile off centre; owner 1 sees the arena rotated.
+    (player().owner === 0 ? [2, 13] : [3, 14]).forEach(function (x) {
+      root.appendChild(svg("rect", { class: "arena-bridge", x: px(x), y: py(ARENA.river[1]), width: 2 * cell, height: (ARENA.river[1] - ARENA.river[0]) * cell }));
+    });
+    ARENA.towers.forEach(function (tower) {
+      [tower[1], ARENA.height - tower[1]].forEach(function (cy) {
+        root.appendChild(svg("rect", { class: "arena-tower", x: px(tower[0] - tower[2] / 2), y: py(cy + tower[2] / 2),
+          width: tower[2] * cell, height: tower[2] * cell, rx: 2 }));
+        if (tower[3]) { root.appendChild(svg("text", { x: px(tower[0]), y: py(cy) + 4, "text-anchor": "middle" }, tower[3])); }
+      });
+    });
+    root.appendChild(svg("text", { x: 4, y: height - 5 }, "己方"));
+    root.appendChild(svg("text", { x: 4, y: 12 }, "对方"));
+
+    var best = action.top_cells.length ? action.top_cells[0][2] : 0;
+    action.top_cells.forEach(function (entry) {
+      var level = best > 0 ? Math.min(4, Math.floor(entry[2] / best * 5)) : 0;
+      var rect = svg("rect", { class: "heat-cell heat-" + level, x: px(entry[0]) + 1, y: py(entry[1] + 1) + 1,
+        width: cell - 2, height: cell - 2, rx: 1.5 });
+      rect.appendChild(svg("title", {}, cellText(entry) + " " + pct(entry[2])));
+      root.appendChild(rect);
+    });
+
+    // Two pins at most: where the player put this card and where the policy would.
+    var pins = [];
+    var same = action.model_cell && action.cell && action.model_cell[0] === action.cell[0] && action.model_cell[1] === action.cell[1];
+    if (action.model_cell && !same) { pins.push({ cell: action.model_cell, kind: "model", label: "模型" }); }
+    if (action.cell) { pins.push({ cell: action.cell, kind: "player", label: same ? "你 = 模型" : "你" }); }
+    pins.forEach(function (pin) {
+      var other = pins.filter(function (candidate) { return candidate !== pin; })[0];
+      // Labels point away from the other pin, and flip back inside at the arena edge.
+      var toRight = other ? pin.cell[0] > other.cell[0] || (pin.cell[0] === other.cell[0] && pin.kind === "player") : pin.cell[0] < 12;
+      var room = pin.label.length * 12 + 10;
+      if (toRight && px(pin.cell[0] + 0.5) + room > width) { toRight = false; }
+      if (!toRight && px(pin.cell[0] + 0.5) - room < 0) { toRight = true; }
+      pin.toRight = toRight;
+    });
+    pins.forEach(function (pin) {
+      var cx = px(pin.cell[0] + 0.5), cy = py(pin.cell[1] + 0.5);
+      var other = pins.filter(function (candidate) { return candidate !== pin; })[0];
+      var nudge = 0;
+      if (other && other.toRight === pin.toRight && Math.abs(other.cell[1] - pin.cell[1]) < 2) {
+        nudge = pin.cell[1] > other.cell[1] || (pin.cell[1] === other.cell[1] && pin.kind === "player") ? -8 : 8;
+      }
+      root.appendChild(pinShape(pin.kind, cx, cy));
+      root.appendChild(svg("text", { class: "pin-label", x: cx + (pin.toRight ? 9 : -9), y: cy + 4 + nudge,
+        "text-anchor": pin.toRight ? "start" : "end" }, pin.label));
+    });
+    return { root: root, pins: pins };
+  }
+
+  function pinShape(kind, cx, cy) {
+    if (kind === "player") { return svg("circle", { class: "pin-player", cx: cx, cy: cy, r: 5 }); }
+    if (kind === "model") {
+      return svg("rect", { class: "pin-model", x: cx - 4.5, y: cy - 4.5, width: 9, height: 9, transform: "rotate(45 " + cx + " " + cy + ")" });
+    }
+    throw new Error("unknown pin kind " + kind);
+  }
+
+  var PIN_MEANING = { player: "你的落点", model: "模型用同一张牌的首选落点" };
+
+  function fact(list, name, value) {
+    list.appendChild(el("dt", {}, name));
+    list.appendChild(el("dd", {}, value));
+  }
+
+  function renderDetail() {
+    var host = document.getElementById("detail");
+    host.textContent = "";
+    var action = state.action === null ? null : player().actions[state.action];
+    if (!action) {
+      host.appendChild(el("p", { class: "empty" }, "在表格里选一次出牌，或点击时间线上的圆点，查看模型对这一步的看法。"));
+      return;
+    }
+    host.appendChild(el("div", { class: "title" }, action.time + " " + action.card.name +
+      (action.kind === "activate_ability" ? "（技能）" : "") + "，" + num(action.cost, 0) + " 费"));
+    host.appendChild(el("div", { class: "where" }, action.cell ? action.zone + " " + cellText(action.cell) : "没有落点"));
+
+    var facts = el("dl", { class: "facts" });
+    fact(facts, "出牌前圣水", num(action.elixir_before, 1));
+    fact(facts, "模型出牌意愿", pct(action.act_probability));
+    fact(facts, "模型给这张牌的概率", pct(action.card_probability));
+    if (action.cell_rank) {
+      fact(facts, "你的落点排名", action.cell_rank + " / " + action.legal_cell_count);
+      fact(facts, "与模型落点的距离", num(action.cell_distance, 1) + " 格");
+    }
+    fact(facts, "5 秒后局势变化", signed(action.value_change));
+    var preferred = action.model_choice;
+    if (preferred) {
+      fact(facts, "模型此刻首选", preferred.same_card ? "同一张牌" : preferred.card.name + " " + pct(preferred.card_probability));
+      if (!preferred.same_card && preferred.cell) { fact(facts, "模型首选的落点", preferred.zone + " " + cellText(preferred.cell)); }
+    }
+    host.appendChild(facts);
+
+    if (!action.model_choice) {
+      host.appendChild(el("p", { class: "hint" }, "这是同一决策窗口里的第二个动作，只有概率，没有落点分布和备选排名。"));
+      return;
+    }
+
+    if (action.cell && action.top_cells.length) {
+      host.appendChild(el("h3", {}, "落点：" + action.card.name));
+      var wrap = el("div", { class: "arena-wrap" });
+      var arena = drawArena(action);
+      wrap.appendChild(arena.root);
+      host.appendChild(wrap);
+      var scale = el("div", { class: "heat-scale" });
+      scale.appendChild(document.createTextNode("模型落点概率 低"));
+      for (var level = 0; level < 5; level++) {
+        var swatch = el("i");
+        swatch.style.background = "var(--heat-" + level + ")";
+        scale.appendChild(swatch);
+      }
+      scale.appendChild(document.createTextNode("高"));
+      host.appendChild(scale);
+      var pins = el("div", { class: "pins-legend" });
+      arena.pins.forEach(function (pin) {
+        var item = el("span");
+        var key = svg("svg", { width: 16, height: 16, viewBox: "0 0 16 16", "aria-hidden": "true" });
+        key.appendChild(pinShape(pin.kind, 8, 8));
+        item.appendChild(key);
+        item.appendChild(document.createTextNode(PIN_MEANING[pin.kind]));
+        pins.appendChild(item);
+      });
+      host.appendChild(pins);
+      host.appendChild(el("p", { class: "cells-list" }, "模型落点前三：" + action.top_cells.slice(0, 3).map(function (entry) {
+        return cellText(entry) + " " + pct(entry[2]);
+      }).join("，")));
+    }
+
+    host.appendChild(el("h3", {}, "此刻模型对各张牌的偏好"));
+    var options = el("div", { class: "options" });
+    action.options.forEach(function (option, index) {
+      var mine = option.card.id === action.card.id && option.kind === action.kind;
+      var name = el("div", { class: "name" }, option.card.name + (option.kind === "activate_ability" ? "（技能）" : ""));
+      var tags = [];
+      if (mine) { tags.push("你出的"); }
+      if (index === 0) { tags.push("模型首选"); }
+      if (tags.length) { name.appendChild(el("small", {}, tags.join(" · "))); }
+      options.appendChild(name);
+      var track = el("div", { class: "track" });
+      var bar = el("div", { class: "bar" + (mine ? " player" : "") });
+      bar.style.width = Math.max(0, Math.min(100, option.probability * 100)) + "%";
+      track.appendChild(bar);
+      options.appendChild(track);
+      options.appendChild(el("div", { class: "value" }, pct(option.probability)));
+    });
+    host.appendChild(options);
+  }
+
+  /* ---------- lists ---------- */
+
+  function focusRange(start, end) {
+    state.focus = [start, end];
+    updateFocus();
+    document.getElementById("timeline").scrollIntoView({ block: "nearest" });
+  }
+
+  function renderMissed() {
+    var table = document.getElementById("missed-table");
+    table.textContent = "";
+    var columns = [["时段", ""], ["时长", "num"], ["圣水", "num"], ["出牌意愿峰值", "num"], ["模型首选", ""]];
+    tableHead(table, columns);
+    var body = el("tbody");
+    player().missed_windows.forEach(function (window) {
+      var row = el("tr");
+      row.appendChild(el("td", { class: "when" }, window.time));
+      row.appendChild(el("td", { class: "num" }, num(window.duration_seconds, 1) + " 秒"));
+      row.appendChild(el("td", { class: "num" }, num(window.elixir_at_peak, 1)));
+      row.appendChild(el("td", { class: "num" }, pct(window.peak_act_probability)));
+      var choice = window.model_choice;
+      row.appendChild(el("td", {}, !choice ? "—" : choice.card.name + (choice.cell ? " → " + choice.zone + " " + cellText(choice.cell) : "")));
+      makeClickable(row, function () { focusRange(window.start_tick, window.end_tick); });
+      body.appendChild(row);
+    });
+    if (!player().missed_windows.length) { emptyRow(body, columns.length, "没有这样的时段。"); }
+    table.appendChild(body);
+  }
+
+  function cardNames(actions, indices) {
+    if (!indices || !indices.length) { return "—"; }
+    return indices.map(function (index) { return actions[index] ? actions[index].card.name : "?"; }).join("、");
+  }
+
+  function renderSwings() {
+    var table = document.getElementById("swings-table");
+    table.textContent = "";
+    var columns = [["时段", ""], ["局势变化", "num"], ["起止值", "num"], ["己方出牌", ""], ["对方出牌", ""]];
+    tableHead(table, columns);
+    var body = el("tbody");
+    var other = opponent();
+    player().swings.forEach(function (swing) {
+      var row = el("tr");
+      row.appendChild(el("td", { class: "when" }, swing.time));
+      row.appendChild(el("td", { class: "num" }, signed(swing.value_change)));
+      row.appendChild(el("td", { class: "num" }, num(swing.value_start) + " → " + num(swing.value_end)));
+      row.appendChild(el("td", {}, cardNames(player().actions, swing.own_actions)));
+      row.appendChild(el("td", {}, other ? cardNames(other.actions, swing.opponent_actions) : "—"));
+      makeClickable(row, function () { focusRange(swing.start_tick, swing.end_tick); });
+      body.appendChild(row);
+    });
+    if (!player().swings.length) { emptyRow(body, columns.length, "局势值没有明显的起伏。"); }
+    table.appendChild(body);
+  }
+
+  function renderUnscored() {
+    var unscored = player().unscored_source_actions || [];
+    var card = document.getElementById("unscored-card");
+    card.hidden = !unscored.length;
+    var table = document.getElementById("unscored-table");
+    table.textContent = "";
+    if (!unscored.length) { return; }
+    tableHead(table, [["时间", ""], ["动作", ""]]);
+    var body = el("tbody");
+    unscored.forEach(function (entry) {
+      var row = el("tr");
+      row.appendChild(el("td", { class: "when" }, entry.time));
+      row.appendChild(el("td", {}, entry.card ? entry.card.name : "技能"));
+      body.appendChild(row);
+    });
+    table.appendChild(body);
+  }
+
+  /* ---------- wiring ---------- */
+
+  function renderPlayer() {
+    renderTiles();
+    buildTimeline();
+    renderTimelineTable();
+    renderChips();
+    renderActions();
+    renderDetail();
+    renderMissed();
+    renderSwings();
+    renderUnscored();
+  }
+
+  var timelineHost = document.getElementById("timeline");
+  timelineHost.addEventListener("keydown", function (event) {
+    if (!timelineContext || event.target !== timelineHost) { return; }
+    var stride = Math.max(1, Math.round(TPS / review.conventions.decision_interval_ticks));
+    var last = timelineContext.count - 1;
+    if (event.key === "ArrowRight") { state.frame = Math.min(last, (state.frame === null ? -stride : state.frame) + stride); }
+    else if (event.key === "ArrowLeft") { state.frame = Math.max(0, (state.frame === null ? stride : state.frame) - stride); }
+    else if (event.key === "Home") { state.frame = 0; }
+    else if (event.key === "End") { state.frame = last; }
+    else if (event.key === "Escape") { state.frame = null; }
+    else { return; }
+    event.preventDefault();
+    updateCrosshair();
+  });
+  timelineHost.addEventListener("blur", function () { state.frame = null; updateCrosshair(); });
+
+  var pendingResize = false;
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(function () {
+      if (pendingResize) { return; }
+      pendingResize = true;
+      requestAnimationFrame(function () {
+        pendingResize = false;
+        if (!timelineContext || Math.floor(timelineHost.clientWidth) !== timelineContext.width) { buildTimeline(); }
+      });
+    }).observe(timelineHost);
+  }
+
+  renderHeader();
+  renderTabs();
+  renderPlayer();
+})();
+</script>
+</body>
+</html>

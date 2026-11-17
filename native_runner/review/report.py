@@ -398,9 +398,11 @@ def build_player_review(
 def fidelity_report(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """Summarize how faithfully the engine reproduced the source match.
 
-    ``faithful``: every action ran and the winner and crowns match the source.
-    ``unverified``: every action ran, but the simulation had not ended when the
-    real match did, so its outcome could not be compared.
+    ``faithful``: the whole timeline replayed and the winner and crowns match
+    the source.  Single actions the engine rejected are still possible; they
+    show up as unscored source actions.
+    ``unverified``: the whole timeline replayed, but the simulation had not
+    ended when the real match did, so its outcome could not be compared.
     ``partial``: the reconstruction stopped early; frames before
     ``first_untrusted_tick`` are still usable.
     ``diverged``: the simulated match ended differently from the real one, so
@@ -469,8 +471,8 @@ def build_review(
 
 
 _VERDICT_TEXT = {
-    "faithful": "可信（动作全部执行，胜负与皇冠数一致）",
-    "unverified": "未核对（动作全部执行，但模拟没有在原对局结束时分出胜负，结果无法比对）",
+    "faithful": "可信（重演走完全程，胜负与皇冠数一致）",
+    "unverified": "未核对（重演走完全程，但模拟没有在原对局结束时分出胜负，结果无法比对）",
     "partial": "部分可信（重演提前中止，只有中止前的帧可用）",
     "diverged": "已偏离（模拟结果与真实对局不同，以下内容仅供参考）",
 }

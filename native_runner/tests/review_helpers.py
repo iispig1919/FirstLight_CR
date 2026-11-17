@@ -257,3 +257,166 @@ def synthetic_result(
         crowns_match=crowns_match,
         decision_frame_count=owner0.time_steps,
     )
+
+
+def scripted_review(*, seed: int = 11, seconds: int = 180, partial: bool = False) -> dict:
+    """Build a full review document from an invented three-minute match.
+
+    Nothing here comes from a model or an engine.  The numbers are scripted so
+    that every part of the report page has something to draw: swings, missed
+    windows, disputed plays, leaked elixir, unscored actions and tower damage.
+    """
+
+    import math
+    import random
+
+    from native_runner.review.report import MatchContext, PlayerContext, build_review
+    from native_runner.review.scoring import (
+        CardOption,
+        CellProbability,
+        FrameScore,
+        ModelChoice,
+        PlayedAction,
+        TowerHitpoints,
+    )
+
+    frame_count = (seconds * 20 - FIRST_POLICY_DECISION_TICK) // POLICY_DECISION_TICKS
+    trusted_frames = frame_count * 3 // 4 if partial else frame_count
+    frames_by_owner: dict[int, list[FrameScore]] = {}
+    contexts: dict[int, PlayerContext] = {}
+    for owner in (0, 1):
+        rng = random.Random(seed + owner)
+        sign = 1.0 if owner == 0 else -1.0
+        hand = list(STANDARD_DECK[:4])
+        cycle = list(STANDARD_DECK[4:])
+        elixir = 5.0
+        next_play = rng.randint(8, 20)
+        frames: list[FrameScore] = []
+        source_actions: list[tuple[int, int | None]] = []
+        for index in range(frame_count):
+            tick = FIRST_POLICY_DECISION_TICK + index * POLICY_DECISION_TICKS
+            time = tick / 20.0
+            multiplier = 2.0 if time >= 120.0 else 1.0
+            # One slow drift, one sharp loss around 1:10 and a recovery near the end.
+            value = sign * (
+                0.12 * math.sin(time / 21.0)
+                - 0.45 / (1.0 + math.exp(-(time - 70.0) / 2.5))
+                + 0.6 / (1.0 + math.exp(-(time - 150.0) / 4.0))
+            ) + rng.uniform(-0.01, 0.01)
+            waiting = 40.0 <= time <= 46.0 or 100.0 <= time <= 103.0
+            act_probability = 0.9 if waiting else min(0.45, 0.04 * elixir) + rng.uniform(0.0, 0.03)
+            options = tuple(
+                sorted(
+                    (
+                        CardOption("play_card", card_id, "normal", card_cost(card_id), probability)
+                        for card_id, probability in zip(hand, (0.52, 0.27, 0.14, 0.07), strict=True)
+                    ),
+                    key=lambda option: -option.probability,
+                )
+            )
+            best = options[0]
+            choice_cell = (3 if rng.random() < 0.5 else 14, rng.randint(8, 14))
+            model_choice = ModelChoice(
+                "play_card", best.card_id, "normal", best.cost, best.probability, choice_cell, 0.3
+            )
+            played: tuple[PlayedAction, ...] = ()
+            unusable = index in (frame_count // 3, frame_count // 2) and owner == 0
+            if index == next_play and not waiting and not unusable:
+                position = rng.choice((0, 0, 1, 2, 3))
+                card_id = options[position].card_id
+                if card_cost(card_id) <= elixir:
+                    center = (3 if rng.random() < 0.5 else 14, rng.randint(6, 13))
+                    ranked = sorted(
+                        ((center[0] + dx, center[1] + dy) for dx in (-1, 0, 1) for dy in (-2, -1, 0, 1)),
+                        key=lambda cell: abs(cell[0] - center[0]) + abs(cell[1] - center[1]),
+                    )
+                    weights = [0.34 * 0.72**rank for rank in range(len(ranked))]
+                    top_cells = tuple(
+                        CellProbability(x, y, weight) for (x, y), weight in zip(ranked, weights, strict=True)
+                    )
+                    rank = rng.choice((1, 1, 2, 4, 9, 40))
+                    cell = ranked[rank - 1] if rank <= len(ranked) else (rng.randint(1, 16), rng.randint(2, 14))
+                    played = (
+                        PlayedAction(
+                            kind="play_card",
+                            card_id=card_id,
+                            form="normal",
+                            cost=card_cost(card_id),
+                            tick=tick + rng.randint(0, 4),
+                            cell=cell,
+                            card_probability=options[position].probability,
+                            cell_probability=weights[rank - 1] if rank <= len(ranked) else 0.002,
+                            cell_rank=rank,
+                            legal_cell_count=270,
+                            model_cell=ranked[0],
+                            model_cell_probability=weights[0],
+                            top_cells=top_cells,
+                        ),
+                    )
+                    source_actions.append((played[0].tick, card_id))
+                    act_probability = rng.choice((0.82, 0.74, 0.61, 0.33, 0.12))
+                next_play = index + rng.randint(18, 34)
+            elif index == next_play:
+                next_play = index + 4
+            if unusable:
+                source_actions.append((tick + 2, hand[0]))
+            enemy_damage = 900.0 * sum(
+                time >= moment for moment in ((60.0, 150.0, 165.0) if owner == 0 else (72.0, 78.0))
+            )
+            own_damage = 900.0 * sum(
+                time >= moment for moment in ((72.0, 78.0) if owner == 0 else (60.0, 150.0, 165.0))
+            )
+            frames.append(
+                FrameScore(
+                    index=index,
+                    tick=tick,
+                    valid=index < trusted_frames,
+                    label_usable=not unusable and index < trusted_frames,
+                    value=value,
+                    realized_return=None,
+                    act_probability=act_probability,
+                    elixir=elixir,
+                    elixir_multiplier=multiplier,
+                    remaining_seconds=max(0.0, seconds - time),
+                    overtime=False,
+                    own_towers=TowerHitpoints(4800.0, max(0.0, 3000.0 - own_damage), 3000.0),
+                    enemy_towers=TowerHitpoints(4800.0, 3000.0, max(0.0, 3000.0 - enemy_damage)),
+                    options=options,
+                    played=played,
+                    model_choice=model_choice,
+                )
+            )
+            elixir = min(10.0, elixir + 0.25 * multiplier / 2.8)
+            if played:
+                elixir -= played[0].cost
+                slot = hand.index(played[0].card_id)
+                cycle.append(hand[slot])
+                hand[slot] = cycle.pop(0)
+        frames_by_owner[owner] = frames
+        contexts[owner] = PlayerContext(
+            side="team" if owner == 0 else "opponent",
+            result=None if partial else ("win" if owner == 0 else "loss"),
+            crowns=None if partial else (1 if owner == 0 else 0),
+            source_elixir_leaked=1.8 if owner == 0 else 4.1,
+            source_actions=tuple(source_actions),
+        )
+    fidelity = {
+        "completed": not partial,
+        "failure_reason": "battle truncated before source timeline" if partial else None,
+        "first_untrusted_tick": (
+            FIRST_POLICY_DECISION_TICK + trusted_frames * POLICY_DECISION_TICKS if partial else None
+        ),
+        "expert_action_count": sum(len(context.source_actions or ()) for context in contexts.values()),
+        "executed_expert_action_count": sum(
+            len(frame.played) for frames in frames_by_owner.values() for frame in frames if frame.valid
+        ),
+        "winner_matches": None if partial else True,
+        "crowns_match": None if partial else True,
+    }
+    return build_review(
+        replay_tag="0" * 32,
+        model={"checkpoint_file": "scripted-example.pt"},
+        fidelity=fidelity,
+        frames_by_owner=frames_by_owner,
+        match=MatchContext(game_mode="Scripted example", duration_seconds=float(seconds), players=contexts),
+    )
