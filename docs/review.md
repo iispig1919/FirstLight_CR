@@ -1,6 +1,6 @@
 # 对局复盘
 
-[中文首页](../README.zh-CN.md) · [训练指南](training.md) · [系统架构](architecture.md) · [测试流程](review_test_plan.md)
+[中文首页](../README.zh-CN.md) · [训练指南](training.md) · [系统架构](architecture.md) · [测试流程](review_test_plan.md) · [交接文档](review_handoff.md)
 
 离线分析器把一场回放在引擎里重演，再让模型逐帧评价：局势如何、此刻该不该出牌、出哪张、放哪里。每场对局得到一个可以直接用浏览器打开的报告页面和一份 JSON。它复用模仿学习的重演缓存，所以**引擎只在重演那一步需要**，挑选对局和复盘本身都是纯 Python。
 
